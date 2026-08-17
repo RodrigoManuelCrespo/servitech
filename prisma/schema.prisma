@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Rol {
+  ADMIN
+  TECNICO
+}
+
+enum EstadoReparacion {
+  RECIBIDO
+  AUTORIZAR
+  APROBADO
+  REPARADO
+  ENTREGADO
+  RECHAZADO
+}
+
+enum CanalEnvio {
+  EMAIL
+  WHATSAPP_MOCK
+}
+
+enum EstadoEnvio {
+  ENVIADO
+  SIMULADO
+  ERROR
+}
+
+model Empresa {
+  id        String   @id @default(cuid())
+  nombre    String
+  telefono  String?
+  email     String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+
+  usuarios     Usuario[]
+  clientes     Cliente[]
+  reparaciones Reparacion[]
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  nombre       String
+  email        String   @unique
+  passwordHash String
+  rol          Rol
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  reparacionesAsignadas Reparacion[]     @relation("TecnicoAsignado")
+  historialCambios      HistorialEstado[]
+}
+
+model Cliente {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nombre    String
+  telefono  String
+  email     String?
+  createdAt DateTime @default(now())
+
+  equipos Equipo[]
+
+  @@index([empresaId])
+}
+
+model Equipo {
+  id             String  @id @default(cuid())
+  clienteId      String
+  cliente        Cliente @relation(fields: [clienteId], references: [id])
+  tipo           String
+  marca          String
+  modelo         String
+  numeroSerie    String?
+  observaciones  String?
+
+  reparaciones Reparacion[]
+
+  @@index([clienteId])
+}
+
+model Reparacion {
+  id                 String            @id @default(cuid())
+  empresaId          String
+  empresa            Empresa           @relation(fields: [empresaId], references: [id])
+  equipoId           String
+  equipo             Equipo            @relation(fields: [equipoId], references: [id])
+  tecnicoAsignadoId  String?
+  tecnicoAsignado    Usuario?          @relation("TecnicoAsignado", fields: [tecnicoAsignadoId], references: [id])
+  estado             EstadoReparacion  @default(RECIBIDO)
+  diagnostico        String?
+  checklist          Json?
+  fechaIngreso       DateTime          @default(now())
+  fechaEntrega       DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  fotos               FotoReparacion[]
+  historialEstados    HistorialEstado[]
+  documentosGenerados DocumentoGenerado[]
+
+  @@index([empresaId])
+  @@index([estado])
+}
+
+model FotoReparacion {
+  id            String     @id @default(cuid())
+  reparacionId  String
+  reparacion    Reparacion @relation(fields: [reparacionId], references: [id])
+  url           String
+  descripcion   String?
+  createdAt     DateTime   @default(now())
+
+  @@index([reparacionId])
+}
+
+model HistorialEstado {
+  id              String            @id @default(cuid())
+  reparacionId    String
+  reparacion      Reparacion        @relation(fields: [reparacionId], references: [id])
+  estadoAnterior  EstadoReparacion?
+  estadoNuevo     EstadoReparacion
+  usuarioId       String
+  usuario         Usuario           @relation(fields: [usuarioId], references: [id])
+  fecha           DateTime          @default(now())
+  comentario      String?
+
+  @@index([reparacionId])
+}
+
+model DocumentoGenerado {
+  id             String       @id @default(cuid())
+  reparacionId   String
+  reparacion     Reparacion   @relation(fields: [reparacionId], references: [id])
+  tipoDocumento  String       @default("ORDEN_PDF")
+  url            String?
+  canalEnvio     CanalEnvio
+  estadoEnvio    EstadoEnvio  @default(SIMULADO)
+  fechaEnvio     DateTime     @default(now())
+
+  @@index([reparacionId])
+}
