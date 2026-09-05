@@ -7,7 +7,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-screen">
       <Nav nombre={session.user.name ?? ""} rol={session.user.rol} />
-      <main className="flex-1 overflow-x-auto p-8">{children}</main>
+      <main className="flex-1 overflow-x-auto p-6 pt-20 md:p-8">{children}</main>
     </div>
   );
 }
