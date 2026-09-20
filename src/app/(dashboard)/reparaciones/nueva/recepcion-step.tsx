@@ -10,7 +10,7 @@ import {
   type ChecklistRecepcion,
   type ChecklistValor,
 } from "@/lib/checklist";
-import { TECNICOS_MOCK } from "./mock-data";
+import { TECNICOS_MOCK } from "@/lib/tecnicos-mock";
 
 const VALOR_LABEL: Record<ChecklistValor, string> = { SI: "Sí", NO: "No", NA: "N/A" };
 const VALORES: ChecklistValor[] = ["SI", "NO", "NA"];
