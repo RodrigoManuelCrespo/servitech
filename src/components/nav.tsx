@@ -20,7 +20,7 @@ import { logout } from "@/lib/actions";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
   { href: "/reparaciones", label: "Reparaciones", icon: Wrench, adminOnly: false },
-  { href: "/reparaciones/nueva", label: "Nueva recepción", icon: CirclePlus, adminOnly: false },
+  { href: "/reparaciones/nueva", label: "Nueva recepción", icon: CirclePlus, adminOnly: true },
   { href: "/clientes", label: "Clientes", icon: Users, adminOnly: false },
   { href: "/usuarios", label: "Usuarios", icon: UserCog, adminOnly: true },
   { href: "/configuracion", label: "Configuración", icon: Settings, adminOnly: true },
