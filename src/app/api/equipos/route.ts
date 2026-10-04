@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireApiSession } from "@/lib/session";
+import { requireApiAdmin } from "@/lib/session";
 import { EQUIPO_TIPOS } from "@/lib/equipo-tipos";
 
 // GET /api/equipos?clienteId=xxx — equipos existentes de un cliente.
+// Solo ADMIN: este endpoint hoy únicamente lo consume el wizard de Nueva
+// Recepción, que es exclusivo de ADMIN (el Técnico no hace recepción).
 export async function GET(request: Request) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const clienteId = new URL(request.url).searchParams.get("clienteId");
   if (!clienteId) {
@@ -41,11 +44,13 @@ const crearEquipoSchema = z.object({
 });
 
 // POST /api/equipos — alta de un equipo nuevo para un cliente existente.
+// Solo ADMIN, mismo motivo que el GET de arriba.
 export async function POST(request: Request) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const body = await request.json().catch(() => null);
   const parsed = crearEquipoSchema.safeParse(body);

@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ClienteStep } from "./cliente-step";
+import { ClienteStep, type ClienteResumen } from "./cliente-step";
 import { EquipoStep, type EquipoResumen } from "./equipo-step";
 import { RecepcionStep } from "./recepcion-step";
-import type { ClienteMock } from "./mock-data";
 
 export function Wizard() {
-  const [cliente, setCliente] = useState<ClienteMock | null>(null);
+  const [cliente, setCliente] = useState<ClienteResumen | null>(null);
   const [equipo, setEquipo] = useState<EquipoResumen | null>(null);
 
   return (

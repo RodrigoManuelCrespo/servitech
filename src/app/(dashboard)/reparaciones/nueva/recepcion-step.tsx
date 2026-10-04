@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,19 +10,29 @@ import {
   type ChecklistRecepcion,
   type ChecklistValor,
 } from "@/lib/checklist";
-import { TECNICOS_MOCK } from "@/lib/tecnicos-mock";
 
 const VALOR_LABEL: Record<ChecklistValor, string> = { SI: "Sí", NO: "No", NA: "N/A" };
 const VALORES: ChecklistValor[] = ["SI", "NO", "NA"];
+
+type Tecnico = { id: string; nombre: string };
 
 export function RecepcionStep({ equipoId }: { equipoId: string }) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistRecepcion>(DEFAULT_CHECKLIST);
   const [fotos, setFotos] = useState<string[]>([]);
+  const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
   const [tecnicoId, setTecnicoId] = useState("");
   const [diagnostico, setDiagnostico] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/usuarios")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((usuarios: { id: string; nombre: string; rol: string; activo: boolean }[]) => {
+        setTecnicos(usuarios.filter((u) => u.rol === "TECNICO" && u.activo));
+      });
+  }, []);
 
   function handleFotoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -107,7 +117,7 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
         <label className="text-sm font-medium">Técnico asignado</label>
         <select value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)} className={inputClass}>
           <option value="">Sin asignar</option>
-          {TECNICOS_MOCK.map((t) => (
+          {tecnicos.map((t) => (
             <option key={t.id} value={t.id}>
               {t.nombre}
             </option>

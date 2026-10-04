@@ -6,7 +6,8 @@ import type { EstadoReparacion, Rol } from "@prisma/client";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { ESTADOS, ESTADO_META } from "@/lib/estado";
-import { TECNICOS_MOCK } from "@/lib/tecnicos-mock";
+
+type Tecnico = { id: string; nombre: string };
 
 type ReparacionRow = {
   id: string;
@@ -32,6 +33,18 @@ export function ReparacionesList({ rol }: { rol: Rol }) {
   const [cliente, setCliente] = useState("");
   const [reparaciones, setReparaciones] = useState<ReparacionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
+
+  useEffect(() => {
+    // GET /api/usuarios es ADMIN-only — ni lo intentamos si el que mira
+    // esta pantalla es TECNICO (el selector de abajo ni se le muestra).
+    if (rol !== "ADMIN") return;
+    fetch("/api/usuarios")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((usuarios: { id: string; nombre: string; rol: string; activo: boolean }[]) => {
+        setTecnicos(usuarios.filter((u) => u.rol === "TECNICO" && u.activo));
+      });
+  }, [rol]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -87,7 +100,7 @@ export function ReparacionesList({ rol }: { rol: Rol }) {
                 className={selectClass}
               >
                 <option value="">Todos</option>
-                {TECNICOS_MOCK.map((t) => (
+                {tecnicos.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.nombre}
                   </option>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiSession } from "@/lib/session";
+import { requireApiAdmin, requireApiSession } from "@/lib/session";
 import { checklistSchema } from "@/lib/checklist";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
@@ -70,11 +70,13 @@ const crearRecepcionSchema = z.object({
 
 // POST /api/reparaciones — recepción de un equipo: crea la Reparacion
 // (estado RECIBIDO) y su primer HistorialEstado en una sola transacción.
+// Solo ADMIN hace la recepción — el Técnico no.
 export async function POST(request: Request) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const body = await request.json().catch(() => null);
   const parsed = crearRecepcionSchema.safeParse(body);

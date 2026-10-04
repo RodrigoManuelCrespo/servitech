@@ -1,8 +1,10 @@
-import { requireSession } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { Wizard } from "./wizard";
 
 export default async function NuevaRecepcionPage() {
-  await requireSession();
+  // Solo ADMIN hace la recepción de equipos — el Técnico únicamente
+  // trabaja sobre reparaciones que ya le fueron asignadas.
+  await requireAdmin();
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
