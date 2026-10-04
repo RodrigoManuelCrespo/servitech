@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { requireApiSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -16,7 +16,10 @@ const crearUsuarioSchema = z.object({
 
 export async function GET() {
   try {
-    const session = await requireSession();
+    const session = await requireApiSession();
+    if (!session) {
+      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+    }
 
     // Bloqueo estricto para no administradores
     if (session.user.rol !== "ADMIN") {
@@ -51,7 +54,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireApiSession();
+    if (!session) {
+      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+    }
 
     if (session.user.rol !== "ADMIN") {
       return NextResponse.json(

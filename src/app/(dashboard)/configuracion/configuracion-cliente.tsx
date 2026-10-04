@@ -71,8 +71,17 @@ import { useEffect, useState } from "react";
         if (res.ok) {
         setEmpresa(await res.json());
         } else {
-        const data = await res.json();
-        setError(data.error?._errors?.[0] ?? "No se pudo guardar");
+        const data: {
+            error?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+        } = await res.json();
+        // El backend manda parsed.error.flatten(): { formErrors, fieldErrors }
+        // (no tiene _errors, esa forma es de .format()).
+        const flat = data.error;
+        const mensaje =
+            flat?.formErrors?.[0] ??
+            Object.values(flat?.fieldErrors ?? {}).flat()[0] ??
+            "No se pudo guardar";
+        setError(mensaje);
         }
         setGuardando(false);
     }

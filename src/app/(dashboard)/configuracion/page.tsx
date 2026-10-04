@@ -1,13 +1,8 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/session";
 import ConfiguracionCliente from "./configuracion-cliente";
 
 export default async function ConfiguracionPage() {
-    const session = await auth();
+  await requireAdmin();
 
-    if (session?.user.rol !== "ADMIN") {
-    redirect("/dashboard");
-    }
-
-    return <ConfiguracionCliente />;
+  return <ConfiguracionCliente />;
 }
