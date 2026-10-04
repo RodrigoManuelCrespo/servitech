@@ -70,8 +70,17 @@ const fechaFmt = new Intl.DateTimeFormat("es-AR", { dateStyle: "short" });
         setCliente((prev) => (prev ? { ...prev, ...data } : prev));
         setEditando(false);
         } else {
-        const data = await res.json();
-        setError(data.error?._errors?.[0] ?? "No se pudo guardar");
+        const data: {
+            error?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+        } = await res.json();
+        // El backend manda parsed.error.flatten(): { formErrors, fieldErrors }
+        // (no tiene _errors, esa forma es de .format()).
+        const flat = data.error;
+        setError(
+            flat?.formErrors?.[0] ??
+            Object.values(flat?.fieldErrors ?? {}).flat()[0] ??
+            "No se pudo guardar",
+        );
         }
         setGuardando(false);
     }
