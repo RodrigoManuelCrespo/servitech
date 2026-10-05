@@ -172,12 +172,9 @@ export function ReparacionesList({ rol }: { rol: Rol }) {
                     {r.fechaEntrega ? fechaFmt.format(new Date(r.fechaEntrega)) : "—"}
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <Link
-                      href={`/reparaciones/${r.id}`}
-                      className="text-primary hover:underline"
-                    >
-                      Ver detalle →
-                    </Link>
+                    <Button variant="outline" render={<Link href={`/reparaciones/${r.id}`} />}>
+                      Ver detalle
+                    </Button>
                   </td>
                 </tr>
               ))}

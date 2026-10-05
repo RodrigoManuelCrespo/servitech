@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { ESTADOS, ESTADO_META } from "@/lib/estado";
 import { cn } from "@/lib/utils";
 
@@ -76,9 +77,9 @@ export default async function DashboardPage() {
       <div className="rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="font-semibold">Últimas reparaciones con movimiento</h2>
-          <Link href="/reparaciones" className="text-sm text-primary hover:underline">
-            Ver todas →
-          </Link>
+          <Button variant="outline" render={<Link href="/reparaciones" />}>
+            Ver todas
+          </Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
