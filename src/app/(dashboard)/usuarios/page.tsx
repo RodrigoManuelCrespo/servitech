@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { FormUsuario } from "./form-usuario";
+import { FormUsuario, EditarUsuario } from "./form-usuario";
 import { cn } from "@/lib/utils";
 
 export default async function UsuariosPage() {
@@ -47,6 +47,7 @@ export default async function UsuariosPage() {
                 <th className="px-5 py-3 font-medium">Email</th>
                 <th className="px-5 py-3 font-medium">Rol</th>
                 <th className="px-5 py-3 font-medium">Estado</th>
+                <th className="px-5 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -85,12 +86,15 @@ export default async function UsuariosPage() {
                       {u.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
+                  <td className="px-5 py-3 text-right">
+                    <EditarUsuario usuario={u} />
+                  </td>
                 </tr>
               ))}
 
               {usuarios.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">
                     No hay usuarios cargados en la empresa.
                   </td>
                 </tr>
