@@ -50,3 +50,15 @@ export const ESTADO_META: Record<
     bg: "bg-estado-rechazado/10",
   },
 };
+
+// Avanza en orden (RECIBIDO → AUTORIZAR → APROBADO → REPARADO → ENTREGADO).
+// Desde cualquier estado no terminal se puede rechazar. ENTREGADO y
+// RECHAZADO son finales: no se puede reabrir ni volver atrás.
+export const TRANSICIONES_VALIDAS: Record<EstadoReparacion, EstadoReparacion[]> = {
+  RECIBIDO: ["AUTORIZAR", "RECHAZADO"],
+  AUTORIZAR: ["APROBADO", "RECHAZADO"],
+  APROBADO: ["REPARADO", "RECHAZADO"],
+  REPARADO: ["ENTREGADO", "RECHAZADO"],
+  ENTREGADO: [],
+  RECHAZADO: [],
+};

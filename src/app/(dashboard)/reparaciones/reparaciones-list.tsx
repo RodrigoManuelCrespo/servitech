@@ -172,7 +172,11 @@ export function ReparacionesList({ rol }: { rol: Rol }) {
                     {r.fechaEntrega ? fechaFmt.format(new Date(r.fechaEntrega)) : "—"}
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <Button variant="outline" render={<Link href={`/reparaciones/${r.id}`} />}>
+                    <Button
+                      variant="outline"
+                      nativeButton={false}
+                      render={<Link href={`/reparaciones/${r.id}`} />}
+                    >
                       Ver detalle
                     </Button>
                   </td>

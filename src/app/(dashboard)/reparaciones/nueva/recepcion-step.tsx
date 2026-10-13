@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FotoPicker } from "@/components/foto-picker";
 import { cn } from "@/lib/utils";
 import {
   CHECKLIST_ITEMS,
@@ -34,12 +35,6 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
       });
   }, []);
 
-  function handleFotoChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFotos((prev) => [...prev, URL.createObjectURL(file)]);
-    e.target.value = "";
-  }
 
   async function handleSubmit() {
     setError(null);
@@ -97,16 +92,7 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">4. Fotos iniciales</h2>
-        <div className="flex flex-wrap gap-3">
-          {fotos.map((src, i) => (
-            // eslint-disable-next-line @next/next/no-img-element -- preview local, nunca se sube
-            <img key={i} src={src} alt="" className="size-24 rounded-md border border-border object-cover" />
-          ))}
-          <label className="flex size-24 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground hover:bg-accent">
-            + Foto
-            <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
-          </label>
-        </div>
+        <FotoPicker fotos={fotos} onAdd={(url) => setFotos((prev) => [...prev, url])} />
         <p className="mt-2 text-xs text-muted-foreground">
           Vista previa local únicamente — todavía no se suben ni se guardan (falta definir el
           almacenamiento, mismo pendiente que en Configuración de empresa).
