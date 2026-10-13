@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils";
 import { logout } from "@/lib/actions";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, adminOnly: true },
   { href: "/reparaciones", label: "Reparaciones", icon: Wrench, adminOnly: false },
   { href: "/reparaciones/nueva", label: "Nueva recepción", icon: CirclePlus, adminOnly: true },
-  { href: "/clientes", label: "Clientes", icon: Users, adminOnly: false },
+  { href: "/clientes", label: "Clientes", icon: Users, adminOnly: true },
   { href: "/usuarios", label: "Usuarios", icon: UserCog, adminOnly: true },
   { href: "/configuracion", label: "Configuración", icon: Settings, adminOnly: true },
 ] as const;
