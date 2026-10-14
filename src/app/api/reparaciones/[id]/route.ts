@@ -15,6 +15,9 @@ const detalleSelect = {
   fechaIngreso: true,
   fechaEntrega: true,
   tecnicoAsignadoId: true,
+  montoPresupuesto: true,
+  mensajePresupuesto: true,
+  linkToken: true,
   equipo: {
     select: {
       id: true,
@@ -90,6 +93,8 @@ const patchSchema = z.object({
   comentario: z.string().trim().optional(),
   diagnostico: z.string().trim().optional(),
   tecnicoAsignadoId: z.string().min(1).nullable().optional(),
+  montoPresupuesto: z.coerce.number().nonnegative().nullable().optional(),
+  mensajePresupuesto: z.string().trim().optional(),
 });
 
 // PATCH /api/reparaciones/[id] — cambia estado, diagnóstico y/o técnico
@@ -111,7 +116,8 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
-  const { estado, comentario, diagnostico, tecnicoAsignadoId } = parsed.data;
+  const { estado, comentario, diagnostico, tecnicoAsignadoId, montoPresupuesto, mensajePresupuesto } =
+    parsed.data;
 
   const actual = await prisma.reparacion.findFirst({
     where: { id, empresaId: session.user.empresaId },
@@ -131,6 +137,12 @@ export async function PATCH(
     if (tecnicoAsignadoId !== undefined) {
       return NextResponse.json(
         { error: "Un técnico no puede reasignar la reparación." },
+        { status: 403 },
+      );
+    }
+    if (montoPresupuesto !== undefined || mensajePresupuesto !== undefined) {
+      return NextResponse.json(
+        { error: "Un técnico no puede cargar el presupuesto." },
         { status: 403 },
       );
     }
@@ -165,6 +177,8 @@ export async function PATCH(
 
   const data: Prisma.ReparacionUpdateInput = {};
   if (diagnostico !== undefined) data.diagnostico = diagnostico || null;
+  if (montoPresupuesto !== undefined) data.montoPresupuesto = montoPresupuesto;
+  if (mensajePresupuesto !== undefined) data.mensajePresupuesto = mensajePresupuesto || null;
   if (tecnicoAsignadoId !== undefined) {
     data.tecnicoAsignado = tecnicoAsignadoId
       ? { connect: { id: tecnicoAsignadoId } }
@@ -195,12 +209,14 @@ export async function PATCH(
 }
 
 const generarDocumentoSchema = z.object({
+  tipoDocumento: z.enum(["ORDEN_PDF", "PRESUPUESTO"]).optional().default("ORDEN_PDF"),
   canalEnvio: z.enum(["EMAIL", "WHATSAPP_MOCK"]).optional().default("WHATSAPP_MOCK"),
 });
 
-// POST /api/reparaciones/[id] — "Generar orden": crea un DocumentoGenerado
-// simulado (no hay integración real de email/WhatsApp todavía, se registra
-// como SIMULADO). Mismo criterio de acceso que el GET.
+// POST /api/reparaciones/[id] — "Generar orden" / "Enviar presupuesto": crea
+// un DocumentoGenerado simulado (no hay integración real de email/WhatsApp
+// todavía, se registra como SIMULADO). Mismo criterio de acceso que el GET,
+// salvo "PRESUPUESTO" que además es admin-only (igual que cargarlo).
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -214,7 +230,7 @@ export async function POST(
 
   const reparacion = await prisma.reparacion.findFirst({
     where: { id, empresaId: session.user.empresaId },
-    select: { id: true, tecnicoAsignadoId: true },
+    select: { id: true, tecnicoAsignadoId: true, montoPresupuesto: true, linkToken: true },
   });
   if (!reparacion) {
     return NextResponse.json({ error: "Reparación no encontrada." }, { status: 404 });
@@ -231,23 +247,47 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
+  const { tipoDocumento, canalEnvio } = parsed.data;
 
-  const documento = await prisma.documentoGenerado.create({
-    data: {
-      reparacionId: id,
-      tipoDocumento: "ORDEN_PDF",
-      canalEnvio: parsed.data.canalEnvio,
-      estadoEnvio: "SIMULADO",
-    },
-    select: {
-      id: true,
-      tipoDocumento: true,
-      canalEnvio: true,
-      estadoEnvio: true,
-      fechaEnvio: true,
-      url: true,
-    },
+  if (tipoDocumento === "PRESUPUESTO") {
+    if (session.user.rol === "TECNICO") {
+      return NextResponse.json(
+        { error: "Un técnico no puede enviar el presupuesto." },
+        { status: 403 },
+      );
+    }
+    if (reparacion.montoPresupuesto === null) {
+      return NextResponse.json(
+        { error: "Cargá un monto antes de enviar el presupuesto." },
+        { status: 400 },
+      );
+    }
+  }
+
+  const linkToken =
+    tipoDocumento === "PRESUPUESTO" ? reparacion.linkToken ?? crypto.randomUUID() : undefined;
+
+  const documento = await prisma.$transaction(async (tx) => {
+    if (linkToken && !reparacion.linkToken) {
+      await tx.reparacion.update({ where: { id }, data: { linkToken } });
+    }
+    return tx.documentoGenerado.create({
+      data: {
+        reparacionId: id,
+        tipoDocumento,
+        canalEnvio,
+        estadoEnvio: "SIMULADO",
+      },
+      select: {
+        id: true,
+        tipoDocumento: true,
+        canalEnvio: true,
+        estadoEnvio: true,
+        fechaEnvio: true,
+        url: true,
+      },
+    });
   });
 
-  return NextResponse.json(documento, { status: 201 });
+  return NextResponse.json({ ...documento, linkToken }, { status: 201 });
 }

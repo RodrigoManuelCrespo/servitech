@@ -18,6 +18,9 @@ type Detalle = {
   fechaIngreso: string;
   fechaEntrega: string | null;
   tecnicoAsignadoId: string | null;
+  montoPresupuesto: string | null;
+  mensajePresupuesto: string | null;
+  linkToken: string | null;
   equipo: {
     tipo: string;
     marca: string;
@@ -67,6 +70,10 @@ const documentoEnvioLabel: Record<"ENVIADO" | "SIMULADO" | "ERROR", string> = {
   SIMULADO: "Simulado",
   ERROR: "Error",
 };
+const documentoTipoLabel: Record<string, string> = {
+  ORDEN_PDF: "Orden de reparación",
+  PRESUPUESTO: "Presupuesto",
+};
 
 const inputClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
@@ -95,6 +102,14 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
 
   const [generando, setGenerando] = useState(false);
 
+  // Presupuesto (admin-only)
+  const [editandoPresupuesto, setEditandoPresupuesto] = useState(false);
+  const [formMonto, setFormMonto] = useState("");
+  const [formMensaje, setFormMensaje] = useState("");
+  const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
+  const [presupuestoError, setPresupuestoError] = useState<string | null>(null);
+  const [enviandoPresupuesto, setEnviandoPresupuesto] = useState(false);
+
   // Igual que en Nueva Recepción: preview local únicamente, no se sube ni
   // se persiste todavía (falta definir el storage).
   const [fotosPreview, setFotosPreview] = useState<string[]>([]);
@@ -111,8 +126,11 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
         setFormComentario("");
         setFormTecnicoId(data.tecnicoAsignadoId ?? "");
         setFormDiagnostico(data.diagnostico ?? "");
+        setFormMonto(data.montoPresupuesto ?? "");
+        setFormMensaje(data.mensajePresupuesto ?? "");
         setEditandoTecnico(false);
         setEditandoDiagnostico(false);
+        setEditandoPresupuesto(false);
       })
       .catch(() => setNotFound(true));
   }, [id]);
@@ -186,6 +204,43 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
     });
     if (res.ok) cargar();
     setGenerando(false);
+  }
+
+  async function handleGuardarPresupuesto() {
+    setGuardandoPresupuesto(true);
+    setPresupuestoError(null);
+    const res = await fetch(`/api/reparaciones/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        montoPresupuesto: formMonto === "" ? null : Number(formMonto),
+        mensajePresupuesto: formMensaje,
+      }),
+    });
+    if (res.ok) {
+      cargar();
+    } else {
+      const data: { error?: string } = await res.json().catch(() => ({}));
+      setPresupuestoError(data.error ?? "No se pudo guardar el presupuesto.");
+    }
+    setGuardandoPresupuesto(false);
+  }
+
+  async function handleEnviarPresupuesto() {
+    setEnviandoPresupuesto(true);
+    setPresupuestoError(null);
+    const res = await fetch(`/api/reparaciones/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipoDocumento: "PRESUPUESTO" }),
+    });
+    if (res.ok) {
+      cargar();
+    } else {
+      const data: { error?: string } = await res.json().catch(() => ({}));
+      setPresupuestoError(data.error ?? "No se pudo enviar el presupuesto.");
+    }
+    setEnviandoPresupuesto(false);
   }
 
   if (notFound) {
@@ -349,6 +404,105 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
             )}
           </div>
 
+          {rol === "ADMIN" && (
+            <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold">Presupuesto</h2>
+                {!editandoPresupuesto && (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoPresupuesto(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {detalle.montoPresupuesto ? "Editar" : "Cargar"}
+                  </button>
+                )}
+              </div>
+
+              {!editandoPresupuesto ? (
+                <>
+                  {detalle.montoPresupuesto ? (
+                    <div className="space-y-1">
+                      <p className="text-lg font-semibold">
+                        ${Number(detalle.montoPresupuesto).toLocaleString("es-AR")}
+                      </p>
+                      {detalle.mensajePresupuesto && (
+                        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                          {detalle.mensajePresupuesto}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Sin presupuesto cargado.</p>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1">
+                      Monto del presupuesto
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formMonto}
+                      onChange={(e) => setFormMonto(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1">
+                      Mensaje para el cliente
+                    </label>
+                    <textarea
+                      value={formMensaje}
+                      onChange={(e) => setFormMensaje(e.target.value)}
+                      rows={3}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleGuardarPresupuesto} disabled={guardandoPresupuesto}>
+                      {guardandoPresupuesto ? "Guardando..." : "Guardar"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditandoPresupuesto(false);
+                        setFormMonto(detalle.montoPresupuesto ?? "");
+                        setFormMensaje(detalle.mensajePresupuesto ?? "");
+                        setPresupuestoError(null);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {presupuestoError && <p className="text-sm text-destructive">{presupuestoError}</p>}
+
+              <div className="pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleEnviarPresupuesto}
+                  disabled={!detalle.montoPresupuesto || enviandoPresupuesto}
+                >
+                  {enviandoPresupuesto ? "Enviando..." : "Enviar presupuesto al cliente"}
+                </Button>
+                {detalle.linkToken && (
+                  <p className="mt-2 text-xs text-muted-foreground break-all">
+                    Link de seguimiento: {window.location.origin}/seguimiento/{detalle.linkToken}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border bg-card p-6 space-y-4">
             <h2 className="font-semibold">Checklist de recepción</h2>
             {checklistItems ? (
@@ -446,7 +600,9 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                 {detalle.documentosGenerados.map((doc) => (
                   <li key={doc.id} className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium">Orden de reparación</p>
+                      <p className="font-medium">
+                        {documentoTipoLabel[doc.tipoDocumento] ?? doc.tipoDocumento}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {doc.canalEnvio === "WHATSAPP_MOCK" ? "WhatsApp" : "Email"} ·{" "}
                         {fechaHoraFmt.format(new Date(doc.fechaEnvio))}
