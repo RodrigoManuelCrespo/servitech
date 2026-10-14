@@ -9,6 +9,14 @@ export async function GET() {
         return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
 
+    // Control de acceso por rol (RBAC): El dashboard general es exclusivo de Administradores
+    if (session.user.rol === "TECNICO") {
+        return NextResponse.json(
+            { error: "Acceso denegado. El dashboard es exclusivo para administradores." },
+            { status: 403 }
+        );
+    }
+
     const empresaId = session.user.empresaId;
 
     const [grouped, ultimas] = await Promise.all([

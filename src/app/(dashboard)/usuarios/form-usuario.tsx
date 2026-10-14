@@ -268,13 +268,16 @@ export function EditarUsuario({ usuario }: { usuario: UsuarioEditable }) {
         Editar
       </Button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Editar usuario">
-        <FormEditar
-          usuario={usuario}
-          onSuccess={() => setOpen(false)}
-          onCancel={() => setOpen(false)}
-        />
-      </Modal>
+      {/* Se agrega text-left para anular la alineación a la derecha del <td> */}
+      <div className="text-left">
+        <Modal open={open} onClose={() => setOpen(false)} title="Editar usuario">
+          <FormEditar
+            usuario={usuario}
+            onSuccess={() => setOpen(false)}
+            onCancel={() => setOpen(false)}
+          />
+        </Modal>
+      </div>
     </>
   );
 }
