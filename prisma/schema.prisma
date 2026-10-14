@@ -104,6 +104,13 @@ model Reparacion {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  // Presupuesto: lo carga el ADMIN (nunca el técnico) a partir del
+  // diagnóstico interno, y es lo único que ve el cliente en el link
+  // público de seguimiento.
+  montoPresupuesto   Decimal?          @db.Decimal(10, 2)
+  mensajePresupuesto String?
+  linkToken          String?           @unique
+
   fotos               FotoReparacion[]
   historialEstados    HistorialEstado[]
   documentosGenerados DocumentoGenerado[]
