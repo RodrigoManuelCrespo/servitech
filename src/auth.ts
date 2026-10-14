@@ -38,7 +38,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
-      return nextUrl.pathname === "/login" || !!auth?.user;
+      // /seguimiento/[token] es público: lo ve el cliente, que no tiene
+      // cuenta en el sistema.
+      return (
+        nextUrl.pathname === "/login" ||
+        nextUrl.pathname.startsWith("/seguimiento") ||
+        !!auth?.user
+      );
     },
     jwt({ token, user }) {
       if (user) {

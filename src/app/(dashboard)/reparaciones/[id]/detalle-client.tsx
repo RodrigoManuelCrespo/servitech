@@ -36,7 +36,7 @@ type Detalle = {
     estadoNuevo: EstadoReparacion;
     fecha: string;
     comentario: string | null;
-    usuario: { nombre: string };
+    usuario: { nombre: string } | null;
   }[];
   documentosGenerados: {
     id: string;
@@ -565,7 +565,7 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                           {meta.label}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {h.usuario.nombre} · {fechaHoraFmt.format(new Date(h.fecha))}
+                          {h.usuario?.nombre ?? "Cliente"} · {fechaHoraFmt.format(new Date(h.fecha))}
                         </p>
                         {h.comentario && <p className="text-sm mt-1">{h.comentario}</p>}
                       </div>

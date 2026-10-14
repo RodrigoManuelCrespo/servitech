@@ -136,8 +136,10 @@ model HistorialEstado {
   reparacion      Reparacion        @relation(fields: [reparacionId], references: [id])
   estadoAnterior  EstadoReparacion?
   estadoNuevo     EstadoReparacion
-  usuarioId       String
-  usuario         Usuario           @relation(fields: [usuarioId], references: [id])
+  // Opcional: null cuando el cambio lo dispara el cliente desde el link
+  // público de seguimiento (no es un Usuario del sistema).
+  usuarioId       String?
+  usuario         Usuario?          @relation(fields: [usuarioId], references: [id])
   fecha           DateTime          @default(now())
   comentario      String?
 
