@@ -425,9 +425,19 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
           <div className="rounded-xl border border-border bg-card p-6 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold">Documentos</h2>
-              <Button size="sm" onClick={handleGenerarOrden} disabled={generando}>
-                {generando ? "Generando..." : "Generar orden PDF"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  nativeButton={false}
+                  render={<a href={`/api/reparaciones/${id}/pdf`} target="_blank" rel="noopener noreferrer" />}
+                >
+                  Descargar PDF
+                </Button>
+                <Button size="sm" onClick={handleGenerarOrden} disabled={generando}>
+                  {generando ? "Generando..." : "Registrar envío"}
+                </Button>
+              </div>
             </div>
             {detalle.documentosGenerados.length === 0 ? (
               <p className="text-sm text-muted-foreground">Todavía no se generó ninguna orden.</p>
