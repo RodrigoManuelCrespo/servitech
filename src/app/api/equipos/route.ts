@@ -39,7 +39,7 @@ const crearEquipoSchema = z.object({
   tipo: z.enum(EQUIPO_TIPOS),
   marca: z.string().trim().min(1),
   modelo: z.string().trim().min(1),
-  numeroSerie: z.string().trim().optional(),
+  numeroSerie: z.string().min(1, "El número de serie es obligatorio"),
   observaciones: z.string().trim().optional(),
 });
 

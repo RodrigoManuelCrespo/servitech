@@ -130,9 +130,11 @@ export function ReparacionesList({ rol }: { rol: Rol }) {
           <span className="text-sm text-muted-foreground">
             {loading ? "Cargando..." : `${reparaciones.length} reparaciones`}
           </span>
-          <Link href="/reparaciones/nueva" className={buttonVariants({ variant: "default" })}>
-            + Nueva recepción
-          </Link>
+          {rol === "ADMIN" && (
+            <Link href="/reparaciones/nueva" className={buttonVariants({ variant: "default" })}>
+              + Nueva recepción
+            </Link>
+          )}
         </div>
       </div>
 

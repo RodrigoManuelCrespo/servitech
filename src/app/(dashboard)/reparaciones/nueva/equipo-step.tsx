@@ -44,22 +44,26 @@ export function EquipoStep({
 
   async function handleCrear() {
     setError(null);
-    if (!tipo || !marca.trim() || !modelo.trim()) {
-      setError("Completá tipo, marca y modelo.");
+
+    // Validamos que todos los campos requeridos estén completos
+    if (!tipo || !marca.trim() || !modelo.trim() || !numeroSerie.trim()) {
+      setError("Completá el tipo, marca, modelo y número de serie.");
       return;
     }
+
     const res = await fetch("/api/equipos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clienteId,
         tipo,
-        marca,
-        modelo,
-        numeroSerie: numeroSerie || undefined,
-        observaciones: observaciones || undefined,
+        marca: marca.trim(),
+        modelo: modelo.trim(),
+        numeroSerie: numeroSerie.trim(),
+        observaciones: observaciones.trim() || undefined,
       }),
     });
+
     if (!res.ok) {
       setError("No se pudo agregar el equipo.");
       return;
@@ -140,8 +144,15 @@ export function EquipoStep({
             <input value={modelo} onChange={(e) => setModelo(e.target.value)} className={inputClass} />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">N° de serie (opcional)</label>
-            <input value={numeroSerie} onChange={(e) => setNumeroSerie(e.target.value)} className={inputClass} />
+            <label className="text-sm font-medium">
+              N° de serie <span className="text-red-500">*</span>
+            </label>
+            <input
+              required
+              value={numeroSerie}
+              onChange={(e) => setNumeroSerie(e.target.value)}
+              className={inputClass}
+            />
           </div>
         </div>
         <div className="mt-3 space-y-1">
