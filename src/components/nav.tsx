@@ -72,7 +72,7 @@ export function Nav({ nombre, rol }: { nombre: string; rol: Rol }) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 md:static md:translate-x-0",
+                    "fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 md:sticky md:top-0 md:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -98,7 +98,7 @@ export function Nav({ nombre, rol }: { nombre: string; rol: Rol }) {
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 px-3">
+          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
           {navItems
             .filter((item) => !item.adminOnly || rol === "ADMIN")
             .map((item) => {
