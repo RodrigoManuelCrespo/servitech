@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CirclePlus,
   LayoutDashboard,
@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { Rol } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -39,11 +40,13 @@ function initials(nombre: string) {
 export function Nav({ nombre, rol }: { nombre: string; rol: Rol }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(pathname);
 
   // Cerrar el drawer automáticamente al navegar a otra pantalla.
-  useEffect(() => {
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   return (
     <>
@@ -73,13 +76,18 @@ export function Nav({ nombre, rol }: { nombre: string; rol: Rol }) {
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between px-5 py-5">
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              S
-            </div>
-            <span className="text-lg font-semibold">ServiTech</span>
-          </div>
+        <div className="flex items-center justify-between px-4 py-5">
+          <Link href="/" className="flex min-w-0 items-center">
+            <Image
+              src="/logo.png"
+              alt="ServiTech"
+              width={210}
+              height={44}
+              priority
+              unoptimized
+              className="h-11 w-auto max-w-full object-contain"
+            />
+          </Link>
           <button
             type="button"
             onClick={() => setOpen(false)}
