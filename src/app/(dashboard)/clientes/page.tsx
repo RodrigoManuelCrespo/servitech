@@ -1,7 +1,7 @@
-import { requireSession } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import ClientesClient from "./clientes-client";
 
-    export default async function ClientesPage() {
-    await requireSession();
-    return <ClientesClient />;
-    }
+export default async function ClientesPage() {
+  await requireAdmin();
+  return <ClientesClient />;
+}

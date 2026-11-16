@@ -3,6 +3,9 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 
+// Cada cuánto se vuelve a consultar en la base si el usuario sigue activo.
+const REVALIDAR_MS = 30_000;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
@@ -46,10 +49,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         !!auth?.user
       );
     },
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.rol = user.rol;
         token.empresaId = user.empresaId;
+        token.verificadoEn = Date.now();
+        return token;
+      }
+
+      // La sesión es un JWT: sin esto, un usuario desactivado seguiría
+      // entrando hasta que venza el token. Se revalida contra la base cada
+      // REVALIDAR_MS; devolver null hace que Auth.js borre la cookie.
+      if (Date.now() - (token.verificadoEn ?? 0) > REVALIDAR_MS) {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: token.sub },
+          select: { activo: true, rol: true },
+        });
+        if (!usuario?.activo) return null;
+        token.rol = usuario.rol;
+        token.verificadoEn = Date.now();
       }
       return token;
     },

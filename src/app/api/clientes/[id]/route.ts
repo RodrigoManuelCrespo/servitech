@@ -1,4 +1,4 @@
-import { requireApiSession } from "@/lib/session";
+import { requireApiAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -7,10 +7,12 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Clientes es solo del admin: el técnico trabaja sobre sus reparaciones.
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const { id } = await params;
 
@@ -45,10 +47,12 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Clientes es solo del admin: el técnico trabaja sobre sus reparaciones.
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const { id } = await params;
   const empresaId = session.user.empresaId;

@@ -1,13 +1,15 @@
-import { requireApiSession } from "@/lib/session";
+import { requireApiAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 export async function GET(req: NextRequest) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Clientes es solo del admin: el técnico trabaja sobre sus reparaciones.
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const empresaId = session.user.empresaId;
   const search = req.nextUrl.searchParams.get("search")?.trim() ?? "";
@@ -48,10 +50,12 @@ const crearClienteSchema = z.object({
 // POST /api/clientes — alta de un cliente nuevo (pedido por el ticket de
 // Nueva Recepción, faltaba en este módulo).
 export async function POST(req: NextRequest) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Clientes es solo del admin: el técnico trabaja sobre sus reparaciones.
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const body = await req.json().catch(() => null);
   const parsed = crearClienteSchema.safeParse(body);

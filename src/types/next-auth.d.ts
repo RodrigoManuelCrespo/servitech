@@ -20,5 +20,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     rol: Rol;
     empresaId: string;
+    // Última vez que se confirmó en la base que el usuario sigue activo.
+    verificadoEn?: number;
   }
 }
