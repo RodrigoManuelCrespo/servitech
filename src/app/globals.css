@@ -40,6 +40,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-estado-recibido: var(--estado-recibido);
+  --color-estado-diagnosticado: var(--estado-diagnosticado);
+  --color-estado-no-reparable: var(--estado-no-reparable);
   --color-estado-autorizar: var(--estado-autorizar);
   --color-estado-aprobado: var(--estado-aprobado);
   --color-estado-reparado: var(--estado-reparado);
@@ -88,6 +90,8 @@
   --sidebar-border: oklch(0.91 0.007 260);
   --sidebar-ring: oklch(0.52 0.19 265);
   --estado-recibido: oklch(0.6 0.15 255);
+  --estado-diagnosticado: oklch(0.62 0.18 345);
+  --estado-no-reparable: oklch(0.66 0.17 45);
   --estado-autorizar: oklch(0.75 0.15 75);
   --estado-aprobado: oklch(0.65 0.16 155);
   --estado-reparado: oklch(0.7 0.13 195);
@@ -128,6 +132,8 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.6 0.19 265);
   --estado-recibido: oklch(0.65 0.15 255);
+  --estado-diagnosticado: oklch(0.7 0.17 345);
+  --estado-no-reparable: oklch(0.72 0.16 45);
   --estado-autorizar: oklch(0.78 0.15 75);
   --estado-aprobado: oklch(0.7 0.16 155);
   --estado-reparado: oklch(0.75 0.13 195);

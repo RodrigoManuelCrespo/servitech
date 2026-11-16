@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { TRANSICIONES_VALIDAS } from "@/lib/estado";
 
 const respuestaSchema = z.object({
   decision: z.enum(["APROBADO", "RECHAZADO"]),
 });
 
-// POST /api/seguimiento/[token]/respuesta — público, sin sesión. El
-// cliente aprueba o rechaza el presupuesto. Solo tiene sentido desde
-// AUTORIZAR (misma validación de transición que el PATCH interno).
+const NO_ESPERA_RESPUESTA = "Esta reparación ya no está esperando una respuesta.";
+
+// POST /api/seguimiento/[token]/respuesta — público, sin sesión. El cliente
+// aprueba o rechaza el presupuesto. Es la única acción que puede hacer, y
+// solo mientras la reparación está en AUTORIZAR: no usa la tabla general de
+// transiciones, porque desde ahí también saldrían cambios internos del taller.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> },
@@ -25,34 +27,38 @@ export async function POST(
 
   const reparacion = await prisma.reparacion.findUnique({
     where: { linkToken: token },
-    select: { id: true, estado: true },
+    select: { id: true, estado: true, montoPresupuesto: true },
   });
   if (!reparacion) {
     return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   }
-
-  const permitidos = TRANSICIONES_VALIDAS[reparacion.estado];
-  if (!permitidos.includes(decision)) {
-    return NextResponse.json(
-      { error: "Esta reparación ya no está esperando una respuesta." },
-      { status: 400 },
-    );
+  if (reparacion.estado !== "AUTORIZAR" || reparacion.montoPresupuesto === null) {
+    return NextResponse.json({ error: NO_ESPERA_RESPUESTA }, { status: 400 });
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.reparacion.update({
-      where: { id: reparacion.id },
+  const aplicada = await prisma.$transaction(async (tx) => {
+    // Condicionado a AUTORIZAR: si el cliente hace doble click o el admin
+    // cambió el estado en el medio, solo se aplica la primera respuesta.
+    const { count } = await tx.reparacion.updateMany({
+      where: { id: reparacion.id, estado: "AUTORIZAR" },
       data: { estado: decision },
     });
+    if (count === 0) return false;
+
     await tx.historialEstado.create({
       data: {
         reparacionId: reparacion.id,
-        estadoAnterior: reparacion.estado,
+        estadoAnterior: "AUTORIZAR",
         estadoNuevo: decision,
         usuarioId: null,
       },
     });
+    return true;
   });
+
+  if (!aplicada) {
+    return NextResponse.json({ error: NO_ESPERA_RESPUESTA }, { status: 409 });
+  }
 
   return NextResponse.json({ ok: true, estado: decision });
 }

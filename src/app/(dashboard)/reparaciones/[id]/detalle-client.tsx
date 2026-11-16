@@ -6,7 +6,7 @@ import type { EstadoReparacion, Rol } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { FotoPicker } from "@/components/foto-picker";
 import { StatusBadge } from "@/components/status-badge";
-import { ESTADO_META, TRANSICIONES_VALIDAS } from "@/lib/estado";
+import { ESTADO_META, ESTADOS_PRESUPUESTO_EDITABLE, transicionesPara } from "@/lib/estado";
 import { CHECKLIST_ITEMS, type ChecklistRecepcion } from "@/lib/checklist";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +74,17 @@ const documentoTipoLabel: Record<string, string> = {
   ORDEN_PDF: "Orden de reparación",
   PRESUPUESTO: "Presupuesto",
 };
+
+// Qué explicarle al usuario cuando, con su rol, no tiene cambios de estado
+// disponibles (le toca a otra persona).
+function mensajeSinCambios(estado: EstadoReparacion): string {
+  if (estado === "ENTREGADO") return "Estado final: el equipo ya fue entregado al cliente.";
+  if (estado === "AUTORIZAR") return "Esperando la respuesta del cliente al presupuesto.";
+  if (estado === "REPARADO" || estado === "NO_REPARABLE" || estado === "RECHAZADO") {
+    return "Listo para devolver al cliente. La entrega la registra el administrador.";
+  }
+  return "No hay cambios de estado disponibles.";
+}
 
 const inputClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
@@ -250,7 +261,11 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
     return <p className="text-muted-foreground">Cargando...</p>;
   }
 
-  const transicionesPosibles = TRANSICIONES_VALIDAS[detalle.estado];
+  const transiciones = transicionesPara(detalle.estado, rol);
+  const seleccionada = transiciones.find((t) => t.estado === formEstado);
+  const faltaDiagnostico = formEstado === "DIAGNOSTICADO" && !detalle.diagnostico?.trim();
+  const faltaMotivo = !!seleccionada?.requiereMotivo && !formComentario.trim();
+  const presupuestoEditable = ESTADOS_PRESUPUESTO_EDITABLE.includes(detalle.estado);
   const checklistItems = detalle.checklist;
 
   return (
@@ -275,7 +290,14 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
         <div className="lg:col-span-2 space-y-6">
           <div className="rounded-xl border border-border bg-card p-6 space-y-3">
             <h2 className="font-semibold">Cambiar estado</h2>
-            {transicionesPosibles.length > 0 ? (
+            {detalle.estado === "DIAGNOSTICADO" && (
+              <p className="text-sm text-muted-foreground">
+                {rol === "ADMIN"
+                  ? "Para avanzar, cargá y enviá el presupuesto al cliente (más abajo)."
+                  : "Esperando que el administrador envíe el presupuesto al cliente."}
+              </p>
+            )}
+            {transiciones.length > 0 ? (
               <>
                 <select
                   value={formEstado}
@@ -283,9 +305,9 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                   className={inputClass}
                 >
                   <option value="">Seleccionar nuevo estado</option>
-                  {transicionesPosibles.map((e) => (
-                    <option key={e} value={e}>
-                      {ESTADO_META[e].label}
+                  {transiciones.map((t) => (
+                    <option key={t.estado} value={t.estado}>
+                      {ESTADO_META[t.estado].label}
                     </option>
                   ))}
                 </select>
@@ -293,25 +315,37 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                   <textarea
                     value={formComentario}
                     onChange={(ev) => setFormComentario(ev.target.value)}
-                    placeholder="Comentario (opcional)"
+                    placeholder={
+                      seleccionada?.requiereMotivo ? "Motivo (obligatorio)" : "Comentario (opcional)"
+                    }
                     rows={2}
                     className={inputClass}
                   />
                 )}
+                {faltaDiagnostico && (
+                  <p className="text-sm text-destructive">
+                    Cargá el diagnóstico antes de marcarla como diagnosticada.
+                  </p>
+                )}
                 {estadoError && <p className="text-sm text-destructive">{estadoError}</p>}
-                <Button onClick={handleCambiarEstado} disabled={!formEstado || cambiandoEstado}>
+                <Button
+                  onClick={handleCambiarEstado}
+                  disabled={!formEstado || faltaMotivo || faltaDiagnostico || cambiandoEstado}
+                >
                   {cambiandoEstado ? "Guardando..." : "Confirmar cambio"}
                 </Button>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Estado final, sin más transiciones.</p>
+              detalle.estado !== "DIAGNOSTICADO" && (
+                <p className="text-sm text-muted-foreground">{mensajeSinCambios(detalle.estado)}</p>
+              )
             )}
           </div>
 
           <div className="rounded-xl border border-border bg-card p-6 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Técnico asignado</h2>
-              {rol === "ADMIN" && !editandoTecnico && (
+              {rol === "ADMIN" && detalle.estado !== "ENTREGADO" && !editandoTecnico && (
                 <button
                   type="button"
                   onClick={() => setEditandoTecnico(true)}
@@ -408,7 +442,7 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
             <div className="rounded-xl border border-border bg-card p-6 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold">Presupuesto</h2>
-                {!editandoPresupuesto && (
+                {presupuestoEditable && !editandoPresupuesto && (
                   <button
                     type="button"
                     onClick={() => setEditandoPresupuesto(true)}
@@ -486,14 +520,31 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
               {presupuestoError && <p className="text-sm text-destructive">{presupuestoError}</p>}
 
               <div className="pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleEnviarPresupuesto}
-                  disabled={!detalle.montoPresupuesto || enviandoPresupuesto}
-                >
-                  {enviandoPresupuesto ? "Enviando..." : "Enviar presupuesto al cliente"}
-                </Button>
+                {presupuestoEditable ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleEnviarPresupuesto}
+                    disabled={
+                      !detalle.montoPresupuesto ||
+                      Number(detalle.montoPresupuesto) <= 0 ||
+                      editandoPresupuesto ||
+                      enviandoPresupuesto
+                    }
+                  >
+                    {enviandoPresupuesto
+                      ? "Enviando..."
+                      : detalle.estado === "AUTORIZAR"
+                        ? "Reenviar presupuesto al cliente"
+                        : "Enviar presupuesto al cliente"}
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {detalle.estado === "RECIBIDO"
+                      ? "El presupuesto se carga una vez que la reparación está diagnosticada."
+                      : "El presupuesto ya no se puede modificar."}
+                  </p>
+                )}
                 {detalle.linkToken && (
                   <p className="mt-2 text-xs text-muted-foreground break-all">
                     Link de seguimiento: {window.location.origin}/seguimiento/{detalle.linkToken}

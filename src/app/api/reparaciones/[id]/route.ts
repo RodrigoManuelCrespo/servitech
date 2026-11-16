@@ -3,9 +3,20 @@ import { z } from "zod";
 import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/session";
-import { TRANSICIONES_VALIDAS } from "@/lib/estado";
+import { ESTADOS_PRESUPUESTO_EDITABLE, transicionesPara } from "@/lib/estado";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
+
+// Otro usuario cambió el estado entre que leímos la reparación y la
+// actualizamos (doble click, dos pestañas, el cliente respondiendo a la vez).
+class EstadoDesactualizadoError extends Error {}
+
+function estadoDesactualizado() {
+  return NextResponse.json(
+    { error: "La reparación cambió de estado mientras tanto. Recargá la página." },
+    { status: 409 },
+  );
+}
 
 const detalleSelect = {
   id: true,
@@ -121,7 +132,7 @@ export async function PATCH(
 
   const actual = await prisma.reparacion.findFirst({
     where: { id, empresaId: session.user.empresaId },
-    select: { id: true, estado: true, tecnicoAsignadoId: true },
+    select: { id: true, estado: true, tecnicoAsignadoId: true, diagnostico: true },
   });
   if (!actual) {
     return NextResponse.json({ error: "Reparación no encontrada." }, { status: 404 });
@@ -156,13 +167,32 @@ export async function PATCH(
   const cambiaEstado = nuevoEstado !== undefined && nuevoEstado !== actual.estado;
 
   if (cambiaEstado) {
-    const permitidos = TRANSICIONES_VALIDAS[actual.estado];
-    if (!permitidos.includes(nuevoEstado!)) {
+    const transicion = transicionesPara(actual.estado, session.user.rol).find(
+      (t) => t.estado === nuevoEstado,
+    );
+    if (!transicion) {
       return NextResponse.json(
         { error: `No se puede pasar de ${actual.estado} a ${nuevoEstado}.` },
         { status: 400 },
       );
     }
+    if (transicion.requiereMotivo && !comentario) {
+      return NextResponse.json({ error: "Indicá el motivo del cambio." }, { status: 400 });
+    }
+    if (nuevoEstado === "DIAGNOSTICADO" && !(diagnostico ?? actual.diagnostico)?.trim()) {
+      return NextResponse.json(
+        { error: "Cargá el diagnóstico antes de marcarla como diagnosticada." },
+        { status: 400 },
+      );
+    }
+  }
+
+  const tocaPresupuesto = montoPresupuesto !== undefined || mensajePresupuesto !== undefined;
+  if (tocaPresupuesto && !ESTADOS_PRESUPUESTO_EDITABLE.includes(actual.estado)) {
+    return NextResponse.json(
+      { error: "El presupuesto solo se puede modificar antes de que el cliente responda." },
+      { status: 400 },
+    );
   }
 
   if (tecnicoAsignadoId) {
@@ -184,26 +214,39 @@ export async function PATCH(
       ? { connect: { id: tecnicoAsignadoId } }
       : { disconnect: true };
   }
-  if (cambiaEstado) {
-    data.estado = nuevoEstado;
-    if (nuevoEstado === "ENTREGADO") data.fechaEntrega = new Date();
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (cambiaEstado) {
+        // Condicionado al estado que validamos: si otro request lo cambió
+        // en el medio, no se aplica nada.
+        const { count } = await tx.reparacion.updateMany({
+          where: { id, estado: actual.estado },
+          data: {
+            estado: nuevoEstado,
+            ...(nuevoEstado === "ENTREGADO" && { fechaEntrega: new Date() }),
+          },
+        });
+        if (count === 0) throw new EstadoDesactualizadoError();
+
+        await tx.historialEstado.create({
+          data: {
+            reparacionId: id,
+            estadoAnterior: actual.estado,
+            estadoNuevo: nuevoEstado!,
+            usuarioId: session.user.id,
+            comentario: comentario || null,
+          },
+        });
+      }
+
+      if (Object.keys(data).length > 0) {
+        await tx.reparacion.update({ where: { id }, data });
+      }
+    });
+  } catch (error) {
+    if (error instanceof EstadoDesactualizadoError) return estadoDesactualizado();
+    throw error;
   }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.reparacion.update({ where: { id }, data });
-
-    if (cambiaEstado) {
-      await tx.historialEstado.create({
-        data: {
-          reparacionId: id,
-          estadoAnterior: actual.estado,
-          estadoNuevo: nuevoEstado!,
-          usuarioId: session.user.id,
-          comentario: comentario || null,
-        },
-      });
-    }
-  });
 
   return NextResponse.json({ ok: true });
 }
@@ -230,7 +273,13 @@ export async function POST(
 
   const reparacion = await prisma.reparacion.findFirst({
     where: { id, empresaId: session.user.empresaId },
-    select: { id: true, tecnicoAsignadoId: true, montoPresupuesto: true, linkToken: true },
+    select: {
+      id: true,
+      estado: true,
+      tecnicoAsignadoId: true,
+      montoPresupuesto: true,
+      linkToken: true,
+    },
   });
   if (!reparacion) {
     return NextResponse.json({ error: "Reparación no encontrada." }, { status: 404 });
@@ -256,9 +305,15 @@ export async function POST(
         { status: 403 },
       );
     }
-    if (reparacion.montoPresupuesto === null) {
+    if (!ESTADOS_PRESUPUESTO_EDITABLE.includes(reparacion.estado)) {
       return NextResponse.json(
-        { error: "Cargá un monto antes de enviar el presupuesto." },
+        { error: "El presupuesto solo se envía con la reparación diagnosticada o a autorizar." },
+        { status: 400 },
+      );
+    }
+    if (reparacion.montoPresupuesto === null || reparacion.montoPresupuesto.lte(0)) {
+      return NextResponse.json(
+        { error: "Cargá un monto mayor a cero antes de enviar el presupuesto." },
         { status: 400 },
       );
     }
@@ -266,28 +321,53 @@ export async function POST(
 
   const linkToken =
     tipoDocumento === "PRESUPUESTO" ? reparacion.linkToken ?? crypto.randomUUID() : undefined;
+  // El primer envío pasa la reparación a "A autorizar": desde ahí le toca
+  // responder al cliente. Un reenvío (ya en AUTORIZAR) no cambia el estado.
+  const pasaAAutorizar = tipoDocumento === "PRESUPUESTO" && reparacion.estado === "DIAGNOSTICADO";
 
-  const documento = await prisma.$transaction(async (tx) => {
-    if (linkToken && !reparacion.linkToken) {
-      await tx.reparacion.update({ where: { id }, data: { linkToken } });
-    }
-    return tx.documentoGenerado.create({
-      data: {
-        reparacionId: id,
-        tipoDocumento,
-        canalEnvio,
-        estadoEnvio: "SIMULADO",
-      },
-      select: {
-        id: true,
-        tipoDocumento: true,
-        canalEnvio: true,
-        estadoEnvio: true,
-        fechaEnvio: true,
-        url: true,
-      },
+  let documento;
+  try {
+    documento = await prisma.$transaction(async (tx) => {
+      if (pasaAAutorizar) {
+        const { count } = await tx.reparacion.updateMany({
+          where: { id, estado: "DIAGNOSTICADO" },
+          data: { estado: "AUTORIZAR" },
+        });
+        if (count === 0) throw new EstadoDesactualizadoError();
+        await tx.historialEstado.create({
+          data: {
+            reparacionId: id,
+            estadoAnterior: "DIAGNOSTICADO",
+            estadoNuevo: "AUTORIZAR",
+            usuarioId: session.user.id,
+            comentario: "Presupuesto enviado al cliente.",
+          },
+        });
+      }
+      if (linkToken && !reparacion.linkToken) {
+        await tx.reparacion.update({ where: { id }, data: { linkToken } });
+      }
+      return tx.documentoGenerado.create({
+        data: {
+          reparacionId: id,
+          tipoDocumento,
+          canalEnvio,
+          estadoEnvio: "SIMULADO",
+        },
+        select: {
+          id: true,
+          tipoDocumento: true,
+          canalEnvio: true,
+          estadoEnvio: true,
+          fechaEnvio: true,
+          url: true,
+        },
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof EstadoDesactualizadoError) return estadoDesactualizado();
+    throw error;
+  }
 
   return NextResponse.json({ ...documento, linkToken }, { status: 201 });
 }
