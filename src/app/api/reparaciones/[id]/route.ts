@@ -64,7 +64,8 @@ const detalleSelect = {
       url: true,
     },
   },
-  fotos: { select: { id: true, url: true, descripcion: true } },
+  // Solo ids: cada imagen se baja aparte de /api/reparaciones/[id]/fotos/[fotoId].
+  fotos: { orderBy: { createdAt: "asc" as const }, select: { id: true } },
 } satisfies Prisma.ReparacionSelect;
 
 // GET /api/reparaciones/[id] — detalle completo de una reparación.

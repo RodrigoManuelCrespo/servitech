@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FotoPicker } from "@/components/foto-picker";
+import { FotoPicker, type FotoItem } from "@/components/foto-picker";
 import { cn } from "@/lib/utils";
 import {
   CHECKLIST_ITEMS,
@@ -20,7 +20,8 @@ type Tecnico = { id: string; nombre: string };
 export function RecepcionStep({ equipoId }: { equipoId: string }) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistRecepcion>(DEFAULT_CHECKLIST);
-  const [fotos, setFotos] = useState<string[]>([]);
+  // Ya comprimidas; se mandan junto con la recepción.
+  const [fotos, setFotos] = useState<FotoItem[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
   const [tecnicoId, setTecnicoId] = useState("");
   const [fallaReportada, setFallaReportada] = useState("");
@@ -49,6 +50,7 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
         checklist,
         tecnicoAsignadoId: tecnicoId || undefined,
         diagnostico: diagnostico || undefined,
+        fotos: fotos.map((f) => f.src),
       }),
     });
     if (!res.ok) {
@@ -112,11 +114,13 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">5. Fotos iniciales</h2>
-        <FotoPicker fotos={fotos} onAdd={(url) => setFotos((prev) => [...prev, url])} />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Vista previa local únicamente — todavía no se suben ni se guardan (falta definir el
-          almacenamiento, mismo pendiente que en Configuración de empresa).
-        </p>
+        <FotoPicker
+          fotos={fotos}
+          onAgregar={(src) =>
+            setFotos((prev) => [...prev, { key: crypto.randomUUID(), src }])
+          }
+          onQuitar={(key) => setFotos((prev) => prev.filter((f) => f.key !== key))}
+        />
       </div>
 
       <div className="space-y-1">

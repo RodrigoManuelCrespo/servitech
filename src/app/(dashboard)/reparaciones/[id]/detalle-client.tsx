@@ -47,7 +47,7 @@ type Detalle = {
     fechaEnvio: string;
     url: string | null;
   }[];
-  fotos: { id: string; url: string; descripcion: string | null }[];
+  fotos: { id: string }[];
 };
 
 type Tecnico = { id: string; nombre: string };
@@ -122,9 +122,6 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
   const [presupuestoError, setPresupuestoError] = useState<string | null>(null);
   const [enviandoPresupuesto, setEnviandoPresupuesto] = useState(false);
 
-  // Igual que en Nueva Recepción: preview local únicamente, no se sube ni
-  // se persiste todavía (falta definir el storage).
-  const [fotosPreview, setFotosPreview] = useState<string[]>([]);
 
   const cargar = useCallback(() => {
     fetch(`/api/reparaciones/${id}`)
@@ -205,6 +202,32 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
     });
     if (res.ok) cargar();
     setGuardandoDiagnostico(false);
+  }
+
+  // Las fotos se actualizan en la lista local (sin recargar todo) para no
+  // perder lo que el usuario esté editando en otra tarjeta.
+  async function handleSubirFoto(dataUri: string) {
+    const res = await fetch(`/api/reparaciones/${id}/fotos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: dataUri }),
+    });
+    const data: { id?: string; error?: string } = await res.json().catch(() => ({}));
+    if (!res.ok || !data.id) throw new Error(data.error ?? "No se pudo subir la foto.");
+    const fotoId = data.id;
+    setDetalle((prev) => (prev ? { ...prev, fotos: [...prev.fotos, { id: fotoId }] } : prev));
+  }
+
+  async function handleQuitarFoto(fotoId: string) {
+    if (!window.confirm("¿Borrar esta foto?")) return;
+    const res = await fetch(`/api/reparaciones/${id}/fotos/${fotoId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data: { error?: string } = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "No se pudo borrar la foto.");
+    }
+    setDetalle((prev) =>
+      prev ? { ...prev, fotos: prev.fotos.filter((f) => f.id !== fotoId) } : prev,
+    );
   }
 
   async function handleGenerarOrden() {
@@ -593,13 +616,14 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
           <div className="rounded-xl border border-border bg-card p-6 space-y-4">
             <h2 className="font-semibold">Fotos</h2>
             <FotoPicker
-              fotos={[...detalle.fotos.map((f) => f.url), ...fotosPreview]}
-              onAdd={(url) => setFotosPreview((prev) => [...prev, url])}
+              fotos={detalle.fotos.map((f) => {
+                const url = `/api/reparaciones/${id}/fotos/${f.id}`;
+                return { key: f.id, src: url, href: url };
+              })}
+              onAgregar={handleSubirFoto}
+              onQuitar={handleQuitarFoto}
+              deshabilitado={detalle.estado === "ENTREGADO"}
             />
-            <p className="text-xs text-muted-foreground">
-              Vista previa local únicamente — todavía no se suben ni se guardan (falta definir el
-              almacenamiento, mismo pendiente que en Configuración de empresa).
-            </p>
           </div>
         </div>
 

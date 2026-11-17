@@ -4,6 +4,7 @@ import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiAdmin, requireApiSession } from "@/lib/session";
 import { checklistSchema } from "@/lib/checklist";
+import { MAX_FOTOS, decodificarFoto } from "@/lib/fotos";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
 
@@ -70,6 +71,11 @@ const crearRecepcionSchema = z.object({
   checklist: checklistSchema,
   tecnicoAsignadoId: z.string().min(1).optional(),
   diagnostico: z.string().trim().optional(),
+  // Fotos iniciales, ya comprimidas en el navegador (data URI).
+  fotos: z
+    .array(z.string())
+    .max(MAX_FOTOS, `Se pueden cargar hasta ${MAX_FOTOS} fotos por reparación.`)
+    .optional(),
 });
 
 // POST /api/reparaciones — recepción de un equipo: crea la Reparacion
@@ -92,7 +98,15 @@ export async function POST(request: Request) {
   }
 
   const empresaId = session.user.empresaId;
-  const { equipoId, fallaReportada, checklist, tecnicoAsignadoId, diagnostico } = parsed.data;
+  const { equipoId, fallaReportada, checklist, tecnicoAsignadoId, diagnostico, fotos = [] } =
+    parsed.data;
+
+  if (fotos.some((foto) => !decodificarFoto(foto))) {
+    return NextResponse.json(
+      { error: "Cada foto debe ser JPG, PNG o WebP y no superar los 600 KB." },
+      { status: 400 },
+    );
+  }
 
   const equipo = await prisma.equipo.findFirst({
     where: { id: equipoId, cliente: { empresaId } },
@@ -122,6 +136,8 @@ export async function POST(request: Request) {
         checklist,
         tecnicoAsignadoId,
         diagnostico: diagnostico || null,
+        // En la misma transacción: no queda una reparación a medio cargar.
+        fotos: { create: fotos.map((url) => ({ url })) },
       },
     });
 
