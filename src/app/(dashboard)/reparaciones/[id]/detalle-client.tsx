@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 type Detalle = {
   id: string;
   estado: EstadoReparacion;
+  fallaReportada: string | null;
   diagnostico: string | null;
   checklist: ChecklistRecepcion | null;
   fechaIngreso: string;
@@ -391,6 +392,15 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+            <h2 className="font-semibold">Falla reportada por el cliente</h2>
+            <p className="text-sm whitespace-pre-wrap">
+              {detalle.fallaReportada || (
+                <span className="text-muted-foreground">No se registró al recibir el equipo.</span>
+              )}
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-6 space-y-3">

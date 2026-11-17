@@ -55,6 +55,7 @@ const fechaHoraFmt = (d: Date) =>
 // recepción: nada interno del taller (diagnóstico, técnico, estado).
 export type OrdenRecepcionData = {
   id: string;
+  fallaReportada: string | null;
   checklist: ChecklistRecepcion | null;
   fechaIngreso: Date;
   equipo: {
@@ -139,6 +140,13 @@ export function OrdenRecepcionPdf({
             </View>
           )}
         </View>
+
+        {reparacion.fallaReportada && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Falla reportada por el cliente</Text>
+            <Text>{reparacion.fallaReportada}</Text>
+          </View>
+        )}
 
         {reparacion.checklist && (
           <View style={styles.section}>

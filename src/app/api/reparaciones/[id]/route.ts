@@ -21,6 +21,7 @@ function estadoDesactualizado() {
 const detalleSelect = {
   id: true,
   estado: true,
+  fallaReportada: true,
   diagnostico: true,
   checklist: true,
   fechaIngreso: true,

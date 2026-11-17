@@ -15,6 +15,7 @@ export async function generarOrdenRecepcion(
       where: { id: reparacionId, empresaId },
       select: {
         id: true,
+        fallaReportada: true,
         checklist: true,
         fechaIngreso: true,
         equipo: {

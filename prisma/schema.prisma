@@ -99,6 +99,9 @@ model Reparacion {
   tecnicoAsignadoId  String?
   tecnicoAsignado    Usuario?          @relation("TecnicoAsignado", fields: [tecnicoAsignadoId], references: [id])
   estado             EstadoReparacion  @default(RECIBIDO)
+  // Lo que el cliente dice que le pasa al equipo al dejarlo. Se carga en la
+  // recepción y va en la orden; el diagnóstico es aparte (interno).
+  fallaReportada     String?
   diagnostico        String?
   checklist          Json?
   fechaIngreso       DateTime          @default(now())

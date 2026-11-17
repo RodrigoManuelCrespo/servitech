@@ -63,6 +63,10 @@ export async function GET(request: Request) {
 
 const crearRecepcionSchema = z.object({
   equipoId: z.string().min(1),
+  fallaReportada: z
+    .string({ error: "Describí la falla que reporta el cliente." })
+    .trim()
+    .min(3, "Describí la falla que reporta el cliente."),
   checklist: checklistSchema,
   tecnicoAsignadoId: z.string().min(1).optional(),
   diagnostico: z.string().trim().optional(),
@@ -81,11 +85,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = crearRecepcionSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Datos inválidos." },
+      { status: 400 },
+    );
   }
 
   const empresaId = session.user.empresaId;
-  const { equipoId, checklist, tecnicoAsignadoId, diagnostico } = parsed.data;
+  const { equipoId, fallaReportada, checklist, tecnicoAsignadoId, diagnostico } = parsed.data;
 
   const equipo = await prisma.equipo.findFirst({
     where: { id: equipoId, cliente: { empresaId } },
@@ -111,6 +118,7 @@ export async function POST(request: Request) {
         empresaId,
         equipoId,
         estado: "RECIBIDO",
+        fallaReportada,
         checklist,
         tecnicoAsignadoId,
         diagnostico: diagnostico || null,
