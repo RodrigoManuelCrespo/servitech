@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       },
       tecnicoAsignado: { select: { nombre: true } },
     },
-    orderBy: { fechaIngreso: "asc" },
+    orderBy: { fechaIngreso: "desc" },
   });
 
   return NextResponse.json(reparaciones);
