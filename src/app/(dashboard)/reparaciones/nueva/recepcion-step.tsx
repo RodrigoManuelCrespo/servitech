@@ -59,7 +59,15 @@ export function RecepcionStep({ equipoId }: { equipoId: string }) {
       setSubmitting(false);
       return;
     }
-    router.push("/");
+    // Si la orden salió por email, vuelve al Dashboard como siempre. Si no
+    // (cliente sin email o falla del envío), va al detalle para que el admin
+    // la descargue e imprima.
+    const data: { id: string; email: "ENVIADO" | "ERROR" | "SIN_EMAIL" } = await res.json();
+    if (data.email === "ENVIADO") {
+      router.push("/");
+    } else {
+      router.push(`/reparaciones/${data.id}?orden=${data.email === "SIN_EMAIL" ? "sin-email" : "error"}`);
+    }
   }
 
   const inputClass =

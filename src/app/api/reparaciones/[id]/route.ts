@@ -254,12 +254,14 @@ export async function PATCH(
 }
 
 const generarDocumentoSchema = z.object({
-  tipoDocumento: z.enum(["ORDEN_PDF", "PRESUPUESTO"]).optional().default("ORDEN_PDF"),
+  // La orden de recepción se envía sola al registrar la recepción
+  // (lib/orden-recepcion); por acá solo pasa el envío del presupuesto.
+  tipoDocumento: z.literal("PRESUPUESTO"),
   canalEnvio: z.enum(["EMAIL", "WHATSAPP_MOCK"]).optional().default("WHATSAPP_MOCK"),
 });
 
-// POST /api/reparaciones/[id] — registra el envío de la orden de recepción o
-// del presupuesto al cliente (DocumentoGenerado). Solo ADMIN: la
+// POST /api/reparaciones/[id] — registra el envío del presupuesto al cliente
+// (DocumentoGenerado). Solo ADMIN: la
 // documentación al cliente la maneja el mostrador, no el técnico.
 export async function POST(
   request: Request,

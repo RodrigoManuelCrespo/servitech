@@ -90,7 +90,16 @@ function mensajeSinCambios(estado: EstadoReparacion): string {
 const inputClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 
-export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
+export default function DetalleClient({
+  id,
+  rol,
+  avisoOrden,
+}: {
+  id: string;
+  rol: Rol;
+  // Viene del wizard cuando la orden de recepción no salió por email.
+  avisoOrden?: "sin-email" | "error";
+}) {
   const [detalle, setDetalle] = useState<Detalle | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
@@ -112,7 +121,6 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
   const [formDiagnostico, setFormDiagnostico] = useState("");
   const [guardandoDiagnostico, setGuardandoDiagnostico] = useState(false);
 
-  const [generando, setGenerando] = useState(false);
 
   // Presupuesto (admin-only)
   const [editandoPresupuesto, setEditandoPresupuesto] = useState(false);
@@ -230,17 +238,6 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
     );
   }
 
-  async function handleGenerarOrden() {
-    setGenerando(true);
-    const res = await fetch(`/api/reparaciones/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    if (res.ok) cargar();
-    setGenerando(false);
-  }
-
   async function handleGuardarPresupuesto() {
     setGuardandoPresupuesto(true);
     setPresupuestoError(null);
@@ -308,6 +305,23 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
           {detalle.equipo.modelo} · Técnico: {detalle.tecnicoAsignado?.nombre ?? "Sin asignar"}
         </p>
       </div>
+
+      {avisoOrden && rol === "ADMIN" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-estado-autorizar/40 bg-estado-autorizar/10 p-4 text-sm">
+          <p>
+            {avisoOrden === "sin-email"
+              ? "Recepción registrada. El cliente no tiene email: descargá la orden de recepción e imprimila para entregársela."
+              : "Recepción registrada, pero no se pudo enviar la orden por email. Descargala e imprimila para entregársela."}
+          </p>
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<a href={`/api/reparaciones/${id}/pdf`} target="_blank" rel="noopener noreferrer" />}
+          >
+            Descargar orden de recepción
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Columna principal */}
@@ -673,9 +687,6 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
                     render={<a href={`/api/reparaciones/${id}/pdf`} target="_blank" rel="noopener noreferrer" />}
                   >
                     Descargar orden de recepción
-                  </Button>
-                  <Button size="sm" onClick={handleGenerarOrden} disabled={generando}>
-                    {generando ? "Generando..." : "Registrar envío"}
                   </Button>
                 </div>
               </div>

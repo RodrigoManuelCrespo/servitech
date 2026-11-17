@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiAdmin, requireApiSession } from "@/lib/session";
 import { checklistSchema } from "@/lib/checklist";
 import { MAX_FOTOS, decodificarFoto } from "@/lib/fotos";
+import { enviarOrdenRecepcion } from "@/lib/orden-recepcion";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
 
@@ -153,5 +154,9 @@ export async function POST(request: Request) {
     return nueva;
   });
 
-  return NextResponse.json({ id: reparacion.id }, { status: 201 });
+  // Fuera de la transacción: la recepción ya quedó registrada aunque el
+  // email falle. El wizard usa el resultado para avisarle al admin.
+  const email = await enviarOrdenRecepcion(reparacion.id, empresaId);
+
+  return NextResponse.json({ id: reparacion.id, email }, { status: 201 });
 }
