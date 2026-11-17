@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ServiTech",
   description: "Gestión de reparaciones técnicas",
+  // iPhone/iPad: ícono y modo app al agregarla a la pantalla de inicio.
+  icons: { apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "ServiTech", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#070b13",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
