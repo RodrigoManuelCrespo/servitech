@@ -6,7 +6,7 @@ import type { EstadoReparacion, Rol } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { FotoPicker } from "@/components/foto-picker";
 import { StatusBadge } from "@/components/status-badge";
-import { ESTADO_META, ESTADOS_PRESUPUESTO_EDITABLE, transicionesPara } from "@/lib/estado";
+import { ESTADO_META, presupuestoEditable as esPresupuestoEditable, transicionesPara } from "@/lib/estado";
 import { CHECKLIST_ITEMS, type ChecklistRecepcion } from "@/lib/checklist";
 import { cn } from "@/lib/utils";
 
@@ -286,7 +286,7 @@ export default function DetalleClient({
   const seleccionada = transiciones.find((t) => t.estado === formEstado);
   const faltaDiagnostico = formEstado === "DIAGNOSTICADO" && !detalle.diagnostico?.trim();
   const faltaMotivo = !!seleccionada?.requiereMotivo && !formComentario.trim();
-  const presupuestoEditable = ESTADOS_PRESUPUESTO_EDITABLE.includes(detalle.estado);
+  const presupuestoEditable = esPresupuestoEditable(detalle.estado, !!detalle.linkToken);
   const checklistItems = detalle.checklist;
 
   return (
@@ -566,6 +566,13 @@ export default function DetalleClient({
 
               {presupuestoError && <p className="text-sm text-destructive">{presupuestoError}</p>}
 
+              {presupuestoEditable && detalle.estado === "RECHAZADO" && (
+                <p className="text-xs text-muted-foreground">
+                  El cliente rechazó el presupuesto. Si quiere otra opción, modificalo y enviale uno
+                  nuevo: la reparación vuelve a &quot;A autorizar&quot;.
+                </p>
+              )}
+
               <div className="pt-1">
                 {presupuestoEditable ? (
                   <Button
@@ -583,7 +590,9 @@ export default function DetalleClient({
                       ? "Enviando..."
                       : detalle.estado === "AUTORIZAR"
                         ? "Reenviar presupuesto al cliente"
-                        : "Enviar presupuesto al cliente"}
+                        : detalle.estado === "RECHAZADO"
+                          ? "Enviar nuevo presupuesto"
+                          : "Enviar presupuesto al cliente"}
                   </Button>
                 ) : (
                   <p className="text-xs text-muted-foreground">

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiAdmin, requireApiSession } from "@/lib/session";
-import { ESTADOS_PRESUPUESTO_EDITABLE, transicionesPara } from "@/lib/estado";
+import { presupuestoEditable, transicionesPara } from "@/lib/estado";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
 
@@ -134,7 +134,7 @@ export async function PATCH(
 
   const actual = await prisma.reparacion.findFirst({
     where: { id, empresaId: session.user.empresaId },
-    select: { id: true, estado: true, tecnicoAsignadoId: true, diagnostico: true },
+    select: { id: true, estado: true, tecnicoAsignadoId: true, diagnostico: true, linkToken: true },
   });
   if (!actual) {
     return NextResponse.json({ error: "Reparación no encontrada." }, { status: 404 });
@@ -190,7 +190,7 @@ export async function PATCH(
   }
 
   const tocaPresupuesto = montoPresupuesto !== undefined || mensajePresupuesto !== undefined;
-  if (tocaPresupuesto && !ESTADOS_PRESUPUESTO_EDITABLE.includes(actual.estado)) {
+  if (tocaPresupuesto && !presupuestoEditable(actual.estado, !!actual.linkToken)) {
     return NextResponse.json(
       { error: "El presupuesto solo se puede modificar antes de que el cliente responda." },
       { status: 400 },
@@ -296,9 +296,9 @@ export async function POST(
   const { tipoDocumento, canalEnvio } = parsed.data;
 
   if (tipoDocumento === "PRESUPUESTO") {
-    if (!ESTADOS_PRESUPUESTO_EDITABLE.includes(reparacion.estado)) {
+    if (!presupuestoEditable(reparacion.estado, !!reparacion.linkToken)) {
       return NextResponse.json(
-        { error: "El presupuesto solo se envía con la reparación diagnosticada o a autorizar." },
+        { error: "El presupuesto solo se envía con la reparación diagnosticada, a autorizar o con un presupuesto rechazado." },
         { status: 400 },
       );
     }
@@ -312,26 +312,32 @@ export async function POST(
 
   const linkToken =
     tipoDocumento === "PRESUPUESTO" ? reparacion.linkToken ?? crypto.randomUUID() : undefined;
-  // El primer envío pasa la reparación a "A autorizar": desde ahí le toca
-  // responder al cliente. Un reenvío (ya en AUTORIZAR) no cambia el estado.
-  const pasaAAutorizar = tipoDocumento === "PRESUPUESTO" && reparacion.estado === "DIAGNOSTICADO";
+  // El primer envío (o uno nuevo después de un rechazo) pasa la reparación a
+  // "A autorizar": desde ahí le toca responder al cliente. Un reenvío (ya en
+  // AUTORIZAR) no cambia el estado.
+  const estadoPrevio = reparacion.estado;
+  const pasaAAutorizar =
+    tipoDocumento === "PRESUPUESTO" && (estadoPrevio === "DIAGNOSTICADO" || estadoPrevio === "RECHAZADO");
 
   let documento;
   try {
     documento = await prisma.$transaction(async (tx) => {
       if (pasaAAutorizar) {
         const { count } = await tx.reparacion.updateMany({
-          where: { id, estado: "DIAGNOSTICADO" },
+          where: { id, estado: estadoPrevio },
           data: { estado: "AUTORIZAR" },
         });
         if (count === 0) throw new EstadoDesactualizadoError();
         await tx.historialEstado.create({
           data: {
             reparacionId: id,
-            estadoAnterior: "DIAGNOSTICADO",
+            estadoAnterior: estadoPrevio,
             estadoNuevo: "AUTORIZAR",
             usuarioId: session.user.id,
-            comentario: "Presupuesto enviado al cliente.",
+            comentario:
+              estadoPrevio === "RECHAZADO"
+                ? "Nuevo presupuesto enviado al cliente."
+                : "Presupuesto enviado al cliente.",
           },
         });
       }

@@ -77,9 +77,10 @@ export type Transicion = {
 const AMBOS: Rol[] = ["ADMIN", "TECNICO"];
 const ADMIN: Rol[] = ["ADMIN"];
 
-// Transiciones que se hacen desde "Cambiar estado". Quedan afuera dos que
+// Transiciones que se hacen desde "Cambiar estado". Quedan afuera tres que
 // tienen su propio camino:
 //  - DIAGNOSTICADO → AUTORIZAR: ocurre sola al enviar el presupuesto.
+//  - RECHAZADO → AUTORIZAR: al enviar un nuevo presupuesto (ver abajo).
 //  - AUTORIZAR → APROBADO/RECHAZADO por el cliente: desde el link público.
 // RECHAZADO es siempre una decisión del cliente (por el presupuesto o porque
 // desistió); NO_REPARABLE es cuando el taller no puede repararlo. Todo
@@ -113,5 +114,15 @@ export function transicionesPara(estado: EstadoReparacion, rol: Rol): Transicion
 }
 
 // El presupuesto se arma después del diagnóstico y se puede corregir (y
-// reenviar) mientras el cliente no respondió. Después queda bloqueado.
+// reenviar) mientras el cliente no respondió.
 export const ESTADOS_PRESUPUESTO_EDITABLE: EstadoReparacion[] = ["DIAGNOSTICADO", "AUTORIZAR"];
+
+// Si el cliente rechazó un presupuesto (le pareció caro, quiere otra
+// opción), el admin puede modificarlo y mandarle uno nuevo: la reparación
+// vuelve a "A autorizar". Solo si el rechazo fue de un presupuesto enviado
+// (tiene link); si desistió antes, no hay nada que volver a presupuestar.
+export function presupuestoEditable(estado: EstadoReparacion, presupuestoEnviado: boolean) {
+  return (
+    ESTADOS_PRESUPUESTO_EDITABLE.includes(estado) || (estado === "RECHAZADO" && presupuestoEnviado)
+  );
+}
