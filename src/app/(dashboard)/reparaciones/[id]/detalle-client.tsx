@@ -71,7 +71,7 @@ const documentoEnvioLabel: Record<"ENVIADO" | "SIMULADO" | "ERROR", string> = {
   ERROR: "Error",
 };
 const documentoTipoLabel: Record<string, string> = {
-  ORDEN_PDF: "Orden de reparación",
+  ORDEN_PDF: "Orden de recepción",
   PRESUPUESTO: "Presupuesto",
 };
 
@@ -627,51 +627,53 @@ export default function DetalleClient({ id, rol }: { id: string; rol: Rol }) {
             )}
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold">Documentos</h2>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  nativeButton={false}
-                  render={<a href={`/api/reparaciones/${id}/pdf`} target="_blank" rel="noopener noreferrer" />}
-                >
-                  Descargar PDF
-                </Button>
-                <Button size="sm" onClick={handleGenerarOrden} disabled={generando}>
-                  {generando ? "Generando..." : "Registrar envío"}
-                </Button>
+          {rol === "ADMIN" && (
+            <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+              <div className="space-y-3">
+                <h2 className="font-semibold">Documentos</h2>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    nativeButton={false}
+                    render={<a href={`/api/reparaciones/${id}/pdf`} target="_blank" rel="noopener noreferrer" />}
+                  >
+                    Descargar orden de recepción
+                  </Button>
+                  <Button size="sm" onClick={handleGenerarOrden} disabled={generando}>
+                    {generando ? "Generando..." : "Registrar envío"}
+                  </Button>
+                </div>
               </div>
+              {detalle.documentosGenerados.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Todavía no se envió ningún documento.</p>
+              ) : (
+                <ul className="space-y-3 text-sm">
+                  {detalle.documentosGenerados.map((doc) => (
+                    <li key={doc.id} className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium">
+                          {documentoTipoLabel[doc.tipoDocumento] ?? doc.tipoDocumento}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.canalEnvio === "WHATSAPP_MOCK" ? "WhatsApp" : "Email"} ·{" "}
+                          {fechaHoraFmt.format(new Date(doc.fechaEnvio))}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium",
+                          documentoEnvioPill[doc.estadoEnvio],
+                        )}
+                      >
+                        {documentoEnvioLabel[doc.estadoEnvio]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            {detalle.documentosGenerados.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Todavía no se generó ninguna orden.</p>
-            ) : (
-              <ul className="space-y-3 text-sm">
-                {detalle.documentosGenerados.map((doc) => (
-                  <li key={doc.id} className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">
-                        {documentoTipoLabel[doc.tipoDocumento] ?? doc.tipoDocumento}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {doc.canalEnvio === "WHATSAPP_MOCK" ? "WhatsApp" : "Email"} ·{" "}
-                        {fechaHoraFmt.format(new Date(doc.fechaEnvio))}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                        documentoEnvioPill[doc.estadoEnvio],
-                      )}
-                    >
-                      {documentoEnvioLabel[doc.estadoEnvio]}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
-import type { EstadoReparacion } from "@prisma/client";
 import { CHECKLIST_ITEMS, type ChecklistRecepcion } from "@/lib/checklist";
-import { ESTADO_META } from "@/lib/estado";
 
 const checklistLabel: Record<"SI" | "NO" | "NA", string> = { SI: "Sí", NO: "No", NA: "N/A" };
 
@@ -19,7 +17,7 @@ const styles = StyleSheet.create({
   empresaNombre: { fontSize: 16, fontWeight: 700 },
   empresaDato: { fontSize: 9, color: "#6b7280" },
   titulo: { fontSize: 18, fontWeight: 700, marginBottom: 4 },
-  estado: { fontSize: 10, color: "#374151", marginBottom: 16 },
+  subtitulo: { fontSize: 10, color: "#374151", marginBottom: 16 },
   section: { marginBottom: 16 },
   sectionTitle: { fontSize: 12, fontWeight: 700, marginBottom: 6, color: "#111827" },
   row: { flexDirection: "row", marginBottom: 3 },
@@ -30,6 +28,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 2,
     borderBottom: "0.5pt solid #f3f4f6",
+  },
+  aviso: {
+    marginTop: 8,
+    padding: 8,
+    fontSize: 9,
+    color: "#374151",
+    border: "0.5pt solid #e5e7eb",
   },
   footer: {
     position: "absolute",
@@ -46,36 +51,35 @@ const fechaFmt = (d: Date) => new Intl.DateTimeFormat("es-AR", { dateStyle: "sho
 const fechaHoraFmt = (d: Date) =>
   new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(d);
 
-export type OrdenReparacionData = {
+// Comprobante que se le da al cliente al dejar el equipo. Solo datos de la
+// recepción: nada interno del taller (diagnóstico, técnico, estado).
+export type OrdenRecepcionData = {
   id: string;
-  estado: EstadoReparacion;
-  diagnostico: string | null;
   checklist: ChecklistRecepcion | null;
   fechaIngreso: Date;
-  fechaEntrega: Date | null;
   equipo: {
     tipo: string;
     marca: string;
     modelo: string;
     numeroSerie: string | null;
+    observaciones: string | null;
     cliente: { nombre: string; telefono: string; email: string | null };
   };
-  tecnicoAsignado: { nombre: string } | null;
 };
 
-export type OrdenReparacionEmpresa = {
+export type OrdenRecepcionEmpresa = {
   nombre: string;
   telefono: string | null;
   email: string | null;
   logoUrl: string | null;
 };
 
-export function OrdenReparacionPdf({
+export function OrdenRecepcionPdf({
   reparacion,
   empresa,
 }: {
-  reparacion: OrdenReparacionData;
-  empresa: OrdenReparacionEmpresa;
+  reparacion: OrdenRecepcionData;
+  empresa: OrdenRecepcionEmpresa;
 }) {
   return (
     <Document>
@@ -89,11 +93,8 @@ export function OrdenReparacionPdf({
           {empresa.logoUrl && <Image src={empresa.logoUrl} style={styles.logo} />}
         </View>
 
-        <Text style={styles.titulo}>Orden de reparación r{reparacion.id.slice(-4)}</Text>
-        <Text style={styles.estado}>
-          Estado actual: {ESTADO_META[reparacion.estado].label}
-        </Text>
-        <Text style={styles.estado}>Fecha de ingreso: {fechaFmt(reparacion.fechaIngreso)}</Text>
+        <Text style={styles.titulo}>Orden de recepción r{reparacion.id.slice(-4)}</Text>
+        <Text style={styles.subtitulo}>Fecha de ingreso: {fechaFmt(reparacion.fechaIngreso)}</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cliente</Text>
@@ -131,21 +132,17 @@ export function OrdenReparacionPdf({
               <Text style={styles.value}>{reparacion.equipo.numeroSerie}</Text>
             </View>
           )}
-          {reparacion.fechaEntrega && (
+          {reparacion.equipo.observaciones && (
             <View style={styles.row}>
-              <Text style={styles.label}>Entrega</Text>
-              <Text style={styles.value}>{fechaFmt(reparacion.fechaEntrega)}</Text>
+              <Text style={styles.label}>Observaciones</Text>
+              <Text style={styles.value}>{reparacion.equipo.observaciones}</Text>
             </View>
           )}
-          <View style={styles.row}>
-            <Text style={styles.label}>Técnico asignado</Text>
-            <Text style={styles.value}>{reparacion.tecnicoAsignado?.nombre ?? "Sin asignar"}</Text>
-          </View>
         </View>
 
         {reparacion.checklist && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Checklist de recepción</Text>
+            <Text style={styles.sectionTitle}>Estado del equipo al recibirlo</Text>
             {CHECKLIST_ITEMS.map((item) => (
               <View key={item.key} style={styles.checklistRow}>
                 <Text>{item.label}</Text>
@@ -155,15 +152,12 @@ export function OrdenReparacionPdf({
           </View>
         )}
 
-        {reparacion.diagnostico && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Diagnóstico</Text>
-            <Text>{reparacion.diagnostico}</Text>
-          </View>
-        )}
+        <Text style={styles.aviso}>
+          Conservá esta orden: identifica a tu equipo y la vas a necesitar para retirarlo.
+        </Text>
 
         <Text style={styles.footer}>
-          Documento generado automáticamente por {empresa.nombre} el {fechaHoraFmt(new Date())}.
+          Documento generado por {empresa.nombre} · {fechaHoraFmt(new Date())}
         </Text>
       </Page>
     </Document>

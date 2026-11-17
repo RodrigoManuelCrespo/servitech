@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiSession } from "@/lib/session";
+import { requireApiAdmin, requireApiSession } from "@/lib/session";
 import { ESTADOS_PRESUPUESTO_EDITABLE, transicionesPara } from "@/lib/estado";
 
 const ESTADOS_VALIDOS = new Set<string>(Object.values(EstadoReparacion));
@@ -256,18 +256,18 @@ const generarDocumentoSchema = z.object({
   canalEnvio: z.enum(["EMAIL", "WHATSAPP_MOCK"]).optional().default("WHATSAPP_MOCK"),
 });
 
-// POST /api/reparaciones/[id] — "Generar orden" / "Enviar presupuesto": crea
-// un DocumentoGenerado simulado (no hay integración real de email/WhatsApp
-// todavía, se registra como SIMULADO). Mismo criterio de acceso que el GET,
-// salvo "PRESUPUESTO" que además es admin-only (igual que cargarlo).
+// POST /api/reparaciones/[id] — registra el envío de la orden de recepción o
+// del presupuesto al cliente (DocumentoGenerado). Solo ADMIN: la
+// documentación al cliente la maneja el mostrador, no el técnico.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireApiSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  const auth = await requireApiAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const session = auth.session;
 
   const { id } = await params;
 
@@ -276,19 +276,12 @@ export async function POST(
     select: {
       id: true,
       estado: true,
-      tecnicoAsignadoId: true,
       montoPresupuesto: true,
       linkToken: true,
     },
   });
   if (!reparacion) {
     return NextResponse.json({ error: "Reparación no encontrada." }, { status: 404 });
-  }
-  if (session.user.rol === "TECNICO" && reparacion.tecnicoAsignadoId !== session.user.id) {
-    return NextResponse.json(
-      { error: "No tenés acceso a esta reparación." },
-      { status: 403 },
-    );
   }
 
   const body = await request.json().catch(() => ({}));
@@ -299,12 +292,6 @@ export async function POST(
   const { tipoDocumento, canalEnvio } = parsed.data;
 
   if (tipoDocumento === "PRESUPUESTO") {
-    if (session.user.rol === "TECNICO") {
-      return NextResponse.json(
-        { error: "Un técnico no puede enviar el presupuesto." },
-        { status: 403 },
-      );
-    }
     if (!ESTADOS_PRESUPUESTO_EDITABLE.includes(reparacion.estado)) {
       return NextResponse.json(
         { error: "El presupuesto solo se envía con la reparación diagnosticada o a autorizar." },
