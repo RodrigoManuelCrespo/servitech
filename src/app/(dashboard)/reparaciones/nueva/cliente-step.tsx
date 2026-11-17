@@ -28,6 +28,8 @@ export function ClienteStep({
   const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Cliente existente con el mismo teléfono: se pregunta si es el mismo.
+  const [duplicado, setDuplicado] = useState<ClienteResumen | null>(null);
 
   useEffect(() => {
     if (selected) return;
@@ -48,7 +50,7 @@ export function ClienteStep({
     return () => clearTimeout(timeout);
   }, [query, selected]);
 
-  async function handleCrear() {
+  async function handleCrear(confirmarDuplicado = false) {
     setError(null);
     if (nombre.trim().length < 1 || telefono.trim().length < 1) {
       setError("Completá nombre y teléfono.");
@@ -57,8 +59,13 @@ export function ClienteStep({
     const res = await fetch("/api/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre, telefono, email: email || undefined }),
+      body: JSON.stringify({ nombre, telefono, email: email || undefined, confirmarDuplicado }),
     });
+    if (res.status === 409) {
+      const data: { duplicado?: ClienteResumen } = await res.json();
+      setDuplicado(data.duplicado ?? null);
+      return;
+    }
     if (!res.ok) {
       setError("No se pudo crear el cliente. Revisá los datos.");
       return;
@@ -128,7 +135,14 @@ export function ClienteStep({
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Teléfono</label>
-                  <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
+                  <input
+                    value={telefono}
+                    onChange={(e) => {
+                      setTelefono(e.target.value);
+                      setDuplicado(null);
+                    }}
+                    className={inputClass}
+                  />
                 </div>
               </div>
               <div className="space-y-1">
@@ -136,9 +150,27 @@ export function ClienteStep({
                 <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="button" onClick={handleCrear}>
-                Crear cliente
-              </Button>
+              {duplicado ? (
+                <div className="space-y-3 rounded-md border border-estado-autorizar/40 bg-estado-autorizar/10 p-3 text-sm">
+                  <p>
+                    Ya existe un cliente con ese teléfono:{" "}
+                    <span className="font-medium">{duplicado.nombre}</span> ({duplicado.telefono}).
+                    ¿Es la misma persona?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={() => onSelect(duplicado)}>
+                      Usar ese cliente
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => handleCrear(true)}>
+                      Crear igual
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button type="button" onClick={() => handleCrear()}>
+                  Crear cliente
+                </Button>
+              )}
             </div>
           ) : pending ? (
             <p className="text-sm text-muted-foreground">Buscando...</p>

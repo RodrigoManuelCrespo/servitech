@@ -23,6 +23,8 @@ type FormAltaProps = {
 function FormAlta({ onCreated, onCancel }: FormAltaProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Cliente existente con el mismo teléfono: se avisa antes de crear otro.
+    const [duplicado, setDuplicado] = useState<{ id: string; nombre: string; telefono: string } | null>(null);
     const [formData, setFormData] = useState({
         nombre: "",
         telefono: "",
@@ -31,6 +33,10 @@ function FormAlta({ onCreated, onCancel }: FormAltaProps) {
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+        await crear(false);
+    }
+
+    async function crear(confirmarDuplicado: boolean) {
         setLoading(true);
         setError(null);
 
@@ -42,8 +48,16 @@ function FormAlta({ onCreated, onCancel }: FormAltaProps) {
                     nombre: formData.nombre,
                     telefono: formData.telefono,
                     email: formData.email || undefined,
+                    confirmarDuplicado,
                 }),
             });
+
+            if (res.status === 409) {
+                const data: { duplicado?: { id: string; nombre: string; telefono: string } } =
+                    await res.json();
+                setDuplicado(data.duplicado ?? null);
+                return;
+            }
 
             if (!res.ok) {
                 // El backend manda parsed.error.flatten(): { formErrors, fieldErrors }
@@ -88,7 +102,10 @@ function FormAlta({ onCreated, onCancel }: FormAltaProps) {
                     required
                     placeholder="Ej: 341 555 1234"
                     value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    onChange={(e) => {
+                        setFormData({ ...formData, telefono: e.target.value });
+                        setDuplicado(null);
+                    }}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
             </div>
@@ -106,11 +123,34 @@ function FormAlta({ onCreated, onCancel }: FormAltaProps) {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
+            {duplicado && (
+                <div className="space-y-3 rounded-md border border-estado-autorizar/40 bg-estado-autorizar/10 p-3 text-sm">
+                    <p>
+                        Ya existe un cliente con ese teléfono:{" "}
+                        <span className="font-medium">{duplicado.nombre}</span> ({duplicado.telefono}).
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            nativeButton={false}
+                            render={<Link href={`/clientes/${duplicado.id}`} />}
+                        >
+                            Ver ficha
+                        </Button>
+                        <Button type="button" size="sm" onClick={() => crear(true)} disabled={loading}>
+                            Crear igual
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-end gap-2 mt-2">
                 <Button type="button" variant="ghost" onClick={onCancel}>
                     Cancelar
                 </Button>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading || !!duplicado}>
                     {loading ? "Creando..." : "Crear cliente"}
                 </Button>
             </div>
