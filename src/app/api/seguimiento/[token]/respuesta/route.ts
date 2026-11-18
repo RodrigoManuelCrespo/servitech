@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 const respuestaSchema = z.object({
   decision: z.enum(["APROBADO", "RECHAZADO"]),
+  // Opcional: por qué rechaza (le sirve al taller para mandar otra opción).
+  motivo: z.string().trim().max(500).optional(),
 });
 
 const NO_ESPERA_RESPUESTA = "Esta reparación ya no está esperando una respuesta.";
@@ -23,7 +25,7 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
-  const { decision } = parsed.data;
+  const { decision, motivo } = parsed.data;
 
   const reparacion = await prisma.reparacion.findUnique({
     where: { linkToken: token },
@@ -51,6 +53,7 @@ export async function POST(
         estadoAnterior: "AUTORIZAR",
         estadoNuevo: decision,
         usuarioId: null,
+        comentario: decision === "RECHAZADO" && motivo ? motivo : null,
       },
     });
     return true;

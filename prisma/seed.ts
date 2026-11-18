@@ -164,7 +164,7 @@ async function main() {
         { estado: "RECIBIDO", dias: 14, por: "admin" },
         { estado: "DIAGNOSTICADO", dias: 13, por: "tecnico" },
         { estado: "AUTORIZAR", dias: 13, hora: 17, por: "admin", comentario: "Presupuesto enviado al cliente." },
-        { estado: "RECHAZADO", dias: 12, por: "cliente" },
+        { estado: "RECHAZADO", dias: 12, por: "cliente", comentario: "Me parece caro. ¿Hay alguna opción más económica?" },
       ],
     },
     {
@@ -196,7 +196,7 @@ async function main() {
         { estado: "RECIBIDO", dias: 8, por: "admin" },
         { estado: "DIAGNOSTICADO", dias: 7, por: "tecnico" },
         { estado: "AUTORIZAR", dias: 7, hora: 15, por: "admin", comentario: "Presupuesto enviado al cliente." },
-        { estado: "APROBADO", dias: 6, por: "cliente" },
+        { estado: "APROBADO", dias: 6, por: "admin", comentario: "Respondió por WhatsApp." },
       ],
     },
     {
@@ -223,7 +223,12 @@ async function main() {
       checklist: checklist("SSNSSN"),
       diagnostico: "Disco rígido con sectores dañados. Se recomienda pasar a SSD de 480 GB y reinstalar el sistema.",
       monto: 95000,
-      mensaje: "Incluye SSD 480 GB, reinstalación de Windows y copia de los archivos del sistema de la farmacia.",
+      mensaje: [
+        "Trabajo a realizar: cambio de disco por SSD 480 GB, reinstalación de Windows y copia de los archivos del sistema de la farmacia.",
+        "Plazo estimado: 3 días hábiles",
+        "Garantía: 6 meses en el SSD, 90 días en la mano de obra",
+        "Validez del presupuesto: 7 días",
+      ].join("\n"),
       pasos: [
         { estado: "RECIBIDO", dias: 5, por: "admin" },
         { estado: "DIAGNOSTICADO", dias: 4, por: "tecnico" },
@@ -303,15 +308,16 @@ async function main() {
       })),
     });
 
-    // Lo que habría registrado la app: la orden por email si el cliente
-    // tiene email, y el envío del presupuesto.
+    // Lo que habría registrado la app: la orden y el presupuesto por email
+    // si el cliente tiene email; si no, el presupuesto por WhatsApp.
     const documentos = [];
     if (conEmail.has(equipo.clienteId)) {
       documentos.push({ tipoDocumento: "ORDEN_PDF", canalEnvio: "EMAIL" as const, estadoEnvio: "ENVIADO" as const, fechaEnvio: fechaIngreso });
     }
     const envio = r.pasos.findIndex((p) => p.estado === "AUTORIZAR");
     if (envio !== -1) {
-      documentos.push({ tipoDocumento: "PRESUPUESTO", canalEnvio: "WHATSAPP_MOCK" as const, estadoEnvio: "SIMULADO" as const, fechaEnvio: fechas[envio] });
+      const canalEnvio = conEmail.has(equipo.clienteId) ? ("EMAIL" as const) : ("WHATSAPP_MOCK" as const);
+      documentos.push({ tipoDocumento: "PRESUPUESTO", canalEnvio, estadoEnvio: "ENVIADO" as const, fechaEnvio: fechas[envio] });
     }
     if (documentos.length) {
       await prisma.documentoGenerado.createMany({ data: documentos.map((d) => ({ ...d, reparacionId: r.id })) });

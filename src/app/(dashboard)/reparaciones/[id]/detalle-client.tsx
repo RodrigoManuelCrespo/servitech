@@ -8,6 +8,15 @@ import { FotoPicker } from "@/components/foto-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { ESTADO_META, presupuestoEditable as esPresupuestoEditable, transicionesPara } from "@/lib/estado";
 import { CHECKLIST_ITEMS, type ChecklistRecepcion } from "@/lib/checklist";
+import {
+  CANALES_RESPUESTA,
+  CANALES_RESPUESTA_VALORES,
+  PLANTILLA_MENSAJE_PRESUPUESTO,
+  formatearMonto,
+  linkSeguimiento,
+  linkWhatsApp,
+  textoWhatsAppPresupuesto,
+} from "@/lib/presupuesto";
 import { cn } from "@/lib/utils";
 
 type Detalle = {
@@ -31,6 +40,7 @@ type Detalle = {
     cliente: { id: string; nombre: string; telefono: string; email: string | null };
   };
   tecnicoAsignado: { id: string; nombre: string } | null;
+  empresa: { nombre: string };
   historialEstados: {
     id: string;
     estadoAnterior: EstadoReparacion | null;
@@ -107,6 +117,7 @@ export default function DetalleClient({
   // Cambiar estado
   const [formEstado, setFormEstado] = useState("");
   const [formComentario, setFormComentario] = useState("");
+  const [formCanal, setFormCanal] = useState("");
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [estadoError, setEstadoError] = useState<string | null>(null);
 
@@ -129,6 +140,11 @@ export default function DetalleClient({
   const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
   const [presupuestoError, setPresupuestoError] = useState<string | null>(null);
   const [enviandoPresupuesto, setEnviandoPresupuesto] = useState(false);
+  // Resultado del último envío por email (para avisar si no salió).
+  const [avisoPresupuesto, setAvisoPresupuesto] = useState<"ENVIADO" | "ERROR" | "SIN_EMAIL" | null>(
+    null,
+  );
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
 
   const cargar = useCallback(() => {
@@ -141,6 +157,7 @@ export default function DetalleClient({
         setDetalle(data);
         setFormEstado("");
         setFormComentario("");
+        setFormCanal("");
         setFormTecnicoId(data.tecnicoAsignadoId ?? "");
         setFormDiagnostico(data.diagnostico ?? "");
         setFormMonto(data.montoPresupuesto ?? "");
@@ -172,7 +189,11 @@ export default function DetalleClient({
     const res = await fetch(`/api/reparaciones/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado: formEstado, comentario: formComentario || undefined }),
+      body: JSON.stringify({
+        estado: formEstado,
+        comentario: formComentario || undefined,
+        canalRespuesta: formCanal || undefined,
+      }),
     });
     if (res.ok) {
       cargar();
@@ -261,18 +282,51 @@ export default function DetalleClient({
   async function handleEnviarPresupuesto() {
     setEnviandoPresupuesto(true);
     setPresupuestoError(null);
+    setAvisoPresupuesto(null);
     const res = await fetch(`/api/reparaciones/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tipoDocumento: "PRESUPUESTO" }),
     });
+    const data: { email?: "ENVIADO" | "ERROR" | "SIN_EMAIL"; error?: string } = await res
+      .json()
+      .catch(() => ({}));
     if (res.ok) {
+      setAvisoPresupuesto(data.email ?? null);
       cargar();
     } else {
-      const data: { error?: string } = await res.json().catch(() => ({}));
       setPresupuestoError(data.error ?? "No se pudo enviar el presupuesto.");
     }
     setEnviandoPresupuesto(false);
+  }
+
+  // El link abre WhatsApp en otra pestaña; acá solo queda registrado.
+  function handleRegistrarWhatsApp() {
+    fetch(`/api/reparaciones/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipoDocumento: "PRESUPUESTO", canalEnvio: "WHATSAPP_MOCK" }),
+    }).then((res) => {
+      if (res.ok) cargar();
+    });
+  }
+
+  async function handleCopiarLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2000);
+    } catch {
+      window.prompt("Copiá el link:", link);
+    }
+  }
+
+  function abrirEditorPresupuesto() {
+    // El primer presupuesto arranca con los datos que pide la ley.
+    if (!detalle?.mensajePresupuesto && !formMensaje.trim()) {
+      setFormMensaje(PLANTILLA_MENSAJE_PRESUPUESTO);
+    }
+    setEditandoPresupuesto(true);
   }
 
   if (notFound) {
@@ -286,7 +340,29 @@ export default function DetalleClient({
   const seleccionada = transiciones.find((t) => t.estado === formEstado);
   const faltaDiagnostico = formEstado === "DIAGNOSTICADO" && !detalle.diagnostico?.trim();
   const faltaMotivo = !!seleccionada?.requiereMotivo && !formComentario.trim();
+  // El admin registra una respuesta que el cliente dio por teléfono, etc.
+  const registraRespuesta =
+    detalle.estado === "AUTORIZAR" && (formEstado === "APROBADO" || formEstado === "RECHAZADO");
+  const faltaCanal = registraRespuesta && !formCanal;
   const presupuestoEditable = esPresupuestoEditable(detalle.estado, !!detalle.linkToken);
+  const emailCliente = detalle.equipo.cliente.email;
+  const linkCliente =
+    detalle.linkToken && typeof window !== "undefined"
+      ? linkSeguimiento(window.location.origin, detalle.linkToken)
+      : null;
+  const whatsapp =
+    linkCliente && detalle.montoPresupuesto
+      ? linkWhatsApp(
+          detalle.equipo.cliente.telefono,
+          textoWhatsAppPresupuesto({
+            cliente: detalle.equipo.cliente.nombre,
+            equipo: `${detalle.equipo.tipo} ${detalle.equipo.marca} ${detalle.equipo.modelo}`,
+            monto: detalle.montoPresupuesto,
+            link: linkCliente,
+            empresa: detalle.empresa.nombre,
+          }),
+        )
+      : null;
   const checklistItems = detalle.checklist;
 
   return (
@@ -335,6 +411,12 @@ export default function DetalleClient({
                   : "Esperando que el administrador envíe el presupuesto al cliente."}
               </p>
             )}
+            {detalle.estado === "AUTORIZAR" && rol === "ADMIN" && (
+              <p className="text-sm text-muted-foreground">
+                Esperando la respuesta del cliente. Si te respondió por teléfono, WhatsApp o en el
+                local, registrala acá.
+              </p>
+            )}
             {transiciones.length > 0 ? (
               <>
                 <select
@@ -349,6 +431,21 @@ export default function DetalleClient({
                     </option>
                   ))}
                 </select>
+                {registraRespuesta && (
+                  <select
+                    value={formCanal}
+                    onChange={(e) => setFormCanal(e.target.value)}
+                    className={inputClass}
+                    aria-label="Cómo respondió el cliente"
+                  >
+                    <option value="">¿Cómo respondió el cliente?</option>
+                    {CANALES_RESPUESTA_VALORES.map((c) => (
+                      <option key={c} value={c}>
+                        {CANALES_RESPUESTA[c].label}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {formEstado && (
                   <textarea
                     value={formComentario}
@@ -368,7 +465,9 @@ export default function DetalleClient({
                 {estadoError && <p className="text-sm text-destructive">{estadoError}</p>}
                 <Button
                   onClick={handleCambiarEstado}
-                  disabled={!formEstado || faltaMotivo || faltaDiagnostico || cambiandoEstado}
+                  disabled={
+                    !formEstado || faltaMotivo || faltaCanal || faltaDiagnostico || cambiandoEstado
+                  }
                 >
                   {cambiandoEstado ? "Guardando..." : "Confirmar cambio"}
                 </Button>
@@ -492,7 +591,7 @@ export default function DetalleClient({
                 {presupuestoEditable && !editandoPresupuesto && (
                   <button
                     type="button"
-                    onClick={() => setEditandoPresupuesto(true)}
+                    onClick={abrirEditorPresupuesto}
                     className="text-sm text-primary hover:underline"
                   >
                     {detalle.montoPresupuesto ? "Editar" : "Cargar"}
@@ -505,7 +604,7 @@ export default function DetalleClient({
                   {detalle.montoPresupuesto ? (
                     <div className="space-y-1">
                       <p className="text-lg font-semibold">
-                        ${Number(detalle.montoPresupuesto).toLocaleString("es-AR")}
+                        {formatearMonto(detalle.montoPresupuesto)}
                       </p>
                       {detalle.mensajePresupuesto && (
                         <p className="text-sm whitespace-pre-wrap text-muted-foreground">
@@ -539,7 +638,7 @@ export default function DetalleClient({
                     <textarea
                       value={formMensaje}
                       onChange={(e) => setFormMensaje(e.target.value)}
-                      rows={3}
+                      rows={5}
                       className={inputClass}
                     />
                   </div>
@@ -573,27 +672,55 @@ export default function DetalleClient({
                 </p>
               )}
 
-              <div className="pt-1">
+              {avisoPresupuesto && (
+                <p
+                  className={cn(
+                    "rounded-lg border p-3 text-sm",
+                    avisoPresupuesto === "ENVIADO"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      : "border-estado-autorizar/40 bg-estado-autorizar/10",
+                  )}
+                >
+                  {avisoPresupuesto === "ENVIADO"
+                    ? `Presupuesto enviado por email a ${emailCliente}.`
+                    : avisoPresupuesto === "SIN_EMAIL"
+                      ? "El cliente no tiene email: mandale el presupuesto por WhatsApp o copiá el link."
+                      : "No se pudo enviar el email. Reenvialo o mandale el presupuesto por WhatsApp."}
+                </p>
+              )}
+
+              <div className="space-y-2 pt-1">
                 {presupuestoEditable ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleEnviarPresupuesto}
-                    disabled={
-                      !detalle.montoPresupuesto ||
-                      Number(detalle.montoPresupuesto) <= 0 ||
-                      editandoPresupuesto ||
-                      enviandoPresupuesto
-                    }
-                  >
-                    {enviandoPresupuesto
-                      ? "Enviando..."
-                      : detalle.estado === "AUTORIZAR"
-                        ? "Reenviar presupuesto al cliente"
-                        : detalle.estado === "RECHAZADO"
-                          ? "Enviar nuevo presupuesto"
-                          : "Enviar presupuesto al cliente"}
-                  </Button>
+                  detalle.estado === "AUTORIZAR" && !emailCliente ? null : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleEnviarPresupuesto}
+                        disabled={
+                          !detalle.montoPresupuesto ||
+                          Number(detalle.montoPresupuesto) <= 0 ||
+                          editandoPresupuesto ||
+                          enviandoPresupuesto
+                        }
+                      >
+                        {enviandoPresupuesto
+                          ? "Enviando..."
+                          : detalle.estado === "AUTORIZAR"
+                            ? "Reenviar por email"
+                            : detalle.estado === "RECHAZADO"
+                              ? "Enviar nuevo presupuesto"
+                              : "Enviar presupuesto al cliente"}
+                      </Button>
+                      {detalle.estado !== "AUTORIZAR" && (
+                        <p className="text-xs text-muted-foreground">
+                          {emailCliente
+                            ? `Le llega por email a ${emailCliente} con el link para aprobarlo o rechazarlo.`
+                            : "El cliente no tiene email: después de enviarlo, mandale el link por WhatsApp."}
+                        </p>
+                      )}
+                    </>
+                  )
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     {detalle.estado === "RECIBIDO"
@@ -601,9 +728,34 @@ export default function DetalleClient({
                       : "El presupuesto ya no se puede modificar."}
                   </p>
                 )}
-                {detalle.linkToken && (
-                  <p className="mt-2 text-xs text-muted-foreground break-all">
-                    Link de seguimiento: {window.location.origin}/seguimiento/{detalle.linkToken}
+
+                {detalle.estado === "AUTORIZAR" && linkCliente && (
+                  <div className="flex flex-wrap gap-2">
+                    {whatsapp && (
+                      <Button
+                        size="sm"
+                        nativeButton={false}
+                        render={
+                          <a
+                            href={whatsapp}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={handleRegistrarWhatsApp}
+                          />
+                        }
+                      >
+                        Enviar por WhatsApp
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => handleCopiarLink(linkCliente)}>
+                      {linkCopiado ? "Link copiado" : "Copiar link"}
+                    </Button>
+                  </div>
+                )}
+
+                {linkCliente && (
+                  <p className="text-xs text-muted-foreground break-all">
+                    Link de seguimiento: {linkCliente}
                   </p>
                 )}
               </div>
@@ -714,14 +866,17 @@ export default function DetalleClient({
                           {fechaHoraFmt.format(new Date(doc.fechaEnvio))}
                         </p>
                       </div>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                          documentoEnvioPill[doc.estadoEnvio],
-                        )}
-                      >
-                        {documentoEnvioLabel[doc.estadoEnvio]}
-                      </span>
+                      {/* Por WhatsApp solo sabemos que se abrió el chat, no si se envió. */}
+                      {doc.canalEnvio === "EMAIL" && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium",
+                            documentoEnvioPill[doc.estadoEnvio],
+                          )}
+                        >
+                          {documentoEnvioLabel[doc.estadoEnvio]}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

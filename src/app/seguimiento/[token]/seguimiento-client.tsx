@@ -19,6 +19,9 @@ export default function SeguimientoClient({ token }: { token: string }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [respondido, setRespondido] = useState<"APROBADO" | "RECHAZADO" | null>(null);
+  // Al rechazar se pide confirmación, con un motivo opcional.
+  const [rechazando, setRechazando] = useState(false);
+  const [motivo, setMotivo] = useState("");
 
   const cargar = useCallback(() => {
     fetch(`/api/seguimiento/${token}`)
@@ -40,7 +43,10 @@ export default function SeguimientoClient({ token }: { token: string }) {
     const res = await fetch(`/api/seguimiento/${token}/respuesta`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({
+        decision,
+        motivo: decision === "RECHAZADO" && motivo.trim() ? motivo.trim() : undefined,
+      }),
     });
     if (res.ok) {
       setRespondido(decision);
@@ -113,7 +119,7 @@ export default function SeguimientoClient({ token }: { token: string }) {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          {puedeResponder && (
+          {puedeResponder && !rechazando && (
             <div className="flex gap-3 pt-2">
               <Button className="flex-1" onClick={() => responder("APROBADO")} disabled={enviando}>
                 Aprobar
@@ -121,7 +127,7 @@ export default function SeguimientoClient({ token }: { token: string }) {
               <Button
                 className="flex-1"
                 variant="outline"
-                onClick={() => responder("RECHAZADO")}
+                onClick={() => setRechazando(true)}
                 disabled={enviando}
               >
                 Rechazar
@@ -129,11 +135,46 @@ export default function SeguimientoClient({ token }: { token: string }) {
             </div>
           )}
 
+          {puedeResponder && rechazando && (
+            <div className="space-y-3 pt-2">
+              <label className="block text-sm text-muted-foreground" htmlFor="motivo">
+                ¿Querés contarnos por qué? (opcional)
+              </label>
+              <textarea
+                id="motivo"
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Ej: me parece caro, ¿hay alguna opción más económica?"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1"
+                  variant="destructive"
+                  onClick={() => responder("RECHAZADO")}
+                  disabled={enviando}
+                >
+                  Confirmar rechazo
+                </Button>
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={() => setRechazando(false)}
+                  disabled={enviando}
+                >
+                  Volver
+                </Button>
+              </div>
+            </div>
+          )}
+
           {respondido && (
             <p className="text-sm text-muted-foreground pt-2">
               {respondido === "APROBADO"
                 ? "Aprobaste el presupuesto. Te vamos a contactar para coordinar."
-                : "Rechazaste el presupuesto."}
+                : "Rechazaste el presupuesto. Si querés otra opción, comunicate con nosotros."}
             </p>
           )}
         </div>
