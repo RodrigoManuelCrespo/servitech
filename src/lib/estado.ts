@@ -85,6 +85,8 @@ const ADMIN: Rol[] = ["ADMIN"];
 // RECHAZADO es siempre una decisión del cliente (por el presupuesto o porque
 // desistió); NO_REPARABLE es cuando el taller no puede repararlo. Todo
 // termina en ENTREGADO, porque el equipo siempre vuelve al cliente.
+// NO_REPARABLE → RECIBIDO es la "segunda opinión": antes de devolverlo sin
+// reparar, el admin puede mandarlo a revisar de nuevo (y reasignarlo).
 export const TRANSICIONES: Record<EstadoReparacion, Transicion[]> = {
   RECIBIDO: [
     { estado: "DIAGNOSTICADO", roles: AMBOS },
@@ -104,7 +106,10 @@ export const TRANSICIONES: Record<EstadoReparacion, Transicion[]> = {
     { estado: "NO_REPARABLE", roles: AMBOS, requiereMotivo: true },
   ],
   REPARADO: [{ estado: "ENTREGADO", roles: ADMIN }],
-  NO_REPARABLE: [{ estado: "ENTREGADO", roles: ADMIN }],
+  NO_REPARABLE: [
+    { estado: "RECIBIDO", roles: ADMIN, requiereMotivo: true },
+    { estado: "ENTREGADO", roles: ADMIN },
+  ],
   RECHAZADO: [{ estado: "ENTREGADO", roles: ADMIN }],
   ENTREGADO: [],
 };
@@ -126,3 +131,31 @@ export function presupuestoEditable(estado: EstadoReparacion, presupuestoEnviado
     ESTADOS_PRESUPUESTO_EDITABLE.includes(estado) || (estado === "RECHAZADO" && presupuestoEnviado)
   );
 }
+
+// El cliente aprueba un presupuesto basado en el diagnóstico: una vez
+// enviado, el diagnóstico queda fijo para que no cambie lo que se aprobó.
+// Antes de enviarlo lo cargan o corrigen el técnico asignado o el admin; si
+// el cliente rechazó, el admin puede replantearlo para mandar otro
+// presupuesto. Depende del estado, no del rol: un admin que también repara
+// hace todo el flujo desde su cuenta.
+export function diagnosticoEditable(
+  estado: EstadoReparacion,
+  rol: Rol,
+  presupuestoEnviado: boolean,
+) {
+  if (estado === "RECIBIDO" || estado === "DIAGNOSTICADO") return true;
+  return estado === "RECHAZADO" && presupuestoEnviado && rol === "ADMIN";
+}
+
+// El técnico asignado se puede cambiar mientras el trabajo está pendiente.
+// Después queda como registro de quién lo hizo.
+export const ESTADOS_REASIGNABLES: EstadoReparacion[] = [
+  "RECIBIDO",
+  "DIAGNOSTICADO",
+  "AUTORIZAR",
+  "APROBADO",
+];
+
+// Estados en los que el equipo está listo para que el cliente lo retire
+// (reparado o no): el admin le puede mandar el aviso de retiro.
+export const ESTADOS_PARA_RETIRAR: EstadoReparacion[] = ["REPARADO", "NO_REPARABLE", "RECHAZADO"];

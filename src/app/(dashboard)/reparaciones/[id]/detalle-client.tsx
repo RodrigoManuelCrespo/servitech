@@ -6,7 +6,16 @@ import type { EstadoReparacion, Rol } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { FotoPicker } from "@/components/foto-picker";
 import { StatusBadge } from "@/components/status-badge";
-import { ESTADO_META, presupuestoEditable as esPresupuestoEditable, transicionesPara } from "@/lib/estado";
+import {
+  ESTADOS_PARA_RETIRAR,
+  ESTADOS_REASIGNABLES,
+  ESTADO_META,
+  diagnosticoEditable as esDiagnosticoEditable,
+  presupuestoEditable as esPresupuestoEditable,
+  transicionesPara,
+} from "@/lib/estado";
+import { PLANTILLA_DIAGNOSTICO, diagnosticoVacio } from "@/lib/diagnostico";
+import { textoWhatsAppRetiro } from "@/lib/aviso-retiro";
 import { CHECKLIST_ITEMS, type ChecklistRecepcion } from "@/lib/checklist";
 import {
   CANALES_RESPUESTA,
@@ -84,6 +93,7 @@ const documentoEnvioLabel: Record<"ENVIADO" | "SIMULADO" | "ERROR", string> = {
 const documentoTipoLabel: Record<string, string> = {
   ORDEN_PDF: "Orden de recepción",
   PRESUPUESTO: "Presupuesto",
+  AVISO_RETIRO: "Aviso de retiro",
 };
 
 // Qué explicarle al usuario cuando, con su rol, no tiene cambios de estado
@@ -118,6 +128,8 @@ export default function DetalleClient({
   const [formEstado, setFormEstado] = useState("");
   const [formComentario, setFormComentario] = useState("");
   const [formCanal, setFormCanal] = useState("");
+  // Al pasar a Diagnosticado el diagnóstico se carga en la misma tarjeta.
+  const [formDiagnosticoEstado, setFormDiagnosticoEstado] = useState("");
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [estadoError, setEstadoError] = useState<string | null>(null);
 
@@ -131,6 +143,11 @@ export default function DetalleClient({
   const [editandoDiagnostico, setEditandoDiagnostico] = useState(false);
   const [formDiagnostico, setFormDiagnostico] = useState("");
   const [guardandoDiagnostico, setGuardandoDiagnostico] = useState(false);
+  const [diagnosticoError, setDiagnosticoError] = useState<string | null>(null);
+
+  // Aviso de retiro (admin-only)
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const [avisoRetiro, setAvisoRetiro] = useState<"ENVIADO" | "ERROR" | "SIN_EMAIL" | null>(null);
 
 
   // Presupuesto (admin-only)
@@ -158,6 +175,7 @@ export default function DetalleClient({
         setFormEstado("");
         setFormComentario("");
         setFormCanal("");
+        setFormDiagnosticoEstado("");
         setFormTecnicoId(data.tecnicoAsignadoId ?? "");
         setFormDiagnostico(data.diagnostico ?? "");
         setFormMonto(data.montoPresupuesto ?? "");
@@ -193,6 +211,7 @@ export default function DetalleClient({
         estado: formEstado,
         comentario: formComentario || undefined,
         canalRespuesta: formCanal || undefined,
+        diagnostico: formEstado === "DIAGNOSTICADO" ? formDiagnosticoEstado : undefined,
       }),
     });
     if (res.ok) {
@@ -224,13 +243,49 @@ export default function DetalleClient({
 
   async function handleGuardarDiagnostico() {
     setGuardandoDiagnostico(true);
+    setDiagnosticoError(null);
     const res = await fetch(`/api/reparaciones/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ diagnostico: formDiagnostico }),
     });
-    if (res.ok) cargar();
+    if (res.ok) {
+      cargar();
+    } else {
+      const data: { error?: string } = await res.json().catch(() => ({}));
+      setDiagnosticoError(data.error ?? "No se pudo guardar el diagnóstico.");
+    }
     setGuardandoDiagnostico(false);
+  }
+
+  function abrirEditorDiagnostico() {
+    if (!formDiagnostico.trim()) setFormDiagnostico(PLANTILLA_DIAGNOSTICO);
+    setEditandoDiagnostico(true);
+  }
+
+  async function handleAvisoRetiroEmail() {
+    setEnviandoAviso(true);
+    setAvisoRetiro(null);
+    const res = await fetch(`/api/reparaciones/${id}/aviso-retiro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canal: "EMAIL" }),
+    });
+    const data: { email?: "ENVIADO" | "ERROR" | "SIN_EMAIL" } = await res.json().catch(() => ({}));
+    setAvisoRetiro(res.ok ? (data.email ?? null) : "ERROR");
+    if (res.ok) cargar();
+    setEnviandoAviso(false);
+  }
+
+  // El link abre WhatsApp en otra pestaña; acá solo queda registrado.
+  function handleAvisoRetiroWhatsApp() {
+    fetch(`/api/reparaciones/${id}/aviso-retiro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canal: "WHATSAPP" }),
+    }).then((res) => {
+      if (res.ok) cargar();
+    });
   }
 
   // Las fotos se actualizan en la lista local (sin recargar todo) para no
@@ -338,7 +393,24 @@ export default function DetalleClient({
 
   const transiciones = transicionesPara(detalle.estado, rol);
   const seleccionada = transiciones.find((t) => t.estado === formEstado);
-  const faltaDiagnostico = formEstado === "DIAGNOSTICADO" && !detalle.diagnostico?.trim();
+  const faltaDiagnostico = formEstado === "DIAGNOSTICADO" && diagnosticoVacio(formDiagnosticoEstado);
+  const diagnosticoEditable = esDiagnosticoEditable(detalle.estado, rol, !!detalle.linkToken);
+  const equipoTexto = `${detalle.equipo.tipo} ${detalle.equipo.marca} ${detalle.equipo.modelo}`;
+  const paraRetirar = ESTADOS_PARA_RETIRAR.includes(detalle.estado);
+  const ultimoAviso = detalle.documentosGenerados.find((d) => d.tipoDocumento === "AVISO_RETIRO");
+  const whatsappRetiro = paraRetirar
+    ? linkWhatsApp(
+        detalle.equipo.cliente.telefono,
+        textoWhatsAppRetiro({
+          estado: detalle.estado,
+          equipo: equipoTexto,
+          numero: `r${detalle.id.slice(-4)}`,
+          monto: detalle.montoPresupuesto,
+          cliente: detalle.equipo.cliente.nombre,
+          empresa: detalle.empresa.nombre,
+        }),
+      )
+    : null;
   const faltaMotivo = !!seleccionada?.requiereMotivo && !formComentario.trim();
   // El admin registra una respuesta que el cliente dio por teléfono, etc.
   const registraRespuesta =
@@ -356,7 +428,7 @@ export default function DetalleClient({
           detalle.equipo.cliente.telefono,
           textoWhatsAppPresupuesto({
             cliente: detalle.equipo.cliente.nombre,
-            equipo: `${detalle.equipo.tipo} ${detalle.equipo.marca} ${detalle.equipo.modelo}`,
+            equipo: equipoTexto,
             monto: detalle.montoPresupuesto,
             link: linkCliente,
             empresa: detalle.empresa.nombre,
@@ -421,13 +493,18 @@ export default function DetalleClient({
               <>
                 <select
                   value={formEstado}
-                  onChange={(e) => setFormEstado(e.target.value)}
+                  onChange={(e) => {
+                    setFormEstado(e.target.value);
+                    if (e.target.value === "DIAGNOSTICADO" && !formDiagnosticoEstado) {
+                      setFormDiagnosticoEstado(detalle.diagnostico || PLANTILLA_DIAGNOSTICO);
+                    }
+                  }}
                   className={inputClass}
                 >
                   <option value="">Seleccionar nuevo estado</option>
                   {transiciones.map((t) => (
                     <option key={t.estado} value={t.estado}>
-                      {ESTADO_META[t.estado].label}
+                      {t.estado === "RECIBIDO" ? "Recibido (volver a revisar)" : ESTADO_META[t.estado].label}
                     </option>
                   ))}
                 </select>
@@ -446,21 +523,45 @@ export default function DetalleClient({
                     ))}
                   </select>
                 )}
-                {formEstado && (
+                {formEstado === "DIAGNOSTICADO" && (
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1" htmlFor="diagnostico-estado">
+                      Diagnóstico (obligatorio)
+                    </label>
+                    <textarea
+                      id="diagnostico-estado"
+                      value={formDiagnosticoEstado}
+                      onChange={(ev) => setFormDiagnosticoEstado(ev.target.value)}
+                      rows={6}
+                      className={inputClass}
+                    />
+                  </div>
+                )}
+                {formEstado === "RECIBIDO" && (
+                  <p className="text-sm text-muted-foreground">
+                    Vuelve a revisión para una segunda opinión: después podés reasignarla a otro
+                    técnico, que carga un nuevo diagnóstico.
+                    {ultimoAviso && (
+                      <span className="mt-1 block text-estado-autorizar">
+                        Ya se le avisó al cliente que retire el equipo: comunicate con él.
+                      </span>
+                    )}
+                  </p>
+                )}
+                {formEstado && formEstado !== "DIAGNOSTICADO" && (
                   <textarea
                     value={formComentario}
                     onChange={(ev) => setFormComentario(ev.target.value)}
                     placeholder={
-                      seleccionada?.requiereMotivo ? "Motivo (obligatorio)" : "Comentario (opcional)"
+                      formEstado === "RECIBIDO"
+                        ? "Motivo (obligatorio). Ej: segunda opinión con otro técnico"
+                        : seleccionada?.requiereMotivo
+                          ? "Motivo (obligatorio)"
+                          : "Comentario (opcional)"
                     }
                     rows={2}
                     className={inputClass}
                   />
-                )}
-                {faltaDiagnostico && (
-                  <p className="text-sm text-destructive">
-                    Cargá el diagnóstico antes de marcarla como diagnosticada.
-                  </p>
                 )}
                 {estadoError && <p className="text-sm text-destructive">{estadoError}</p>}
                 <Button
@@ -479,10 +580,62 @@ export default function DetalleClient({
             )}
           </div>
 
+          {rol === "ADMIN" && paraRetirar && (
+            <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+              <h2 className="font-semibold">Aviso de retiro</h2>
+              <p className="text-sm text-muted-foreground">
+                {ultimoAviso
+                  ? `Último aviso: ${fechaHoraFmt.format(new Date(ultimoAviso.fechaEnvio))} por ${
+                      ultimoAviso.canalEnvio === "EMAIL" ? "email" : "WhatsApp"
+                    }${ultimoAviso.estadoEnvio === "ERROR" ? " (no se pudo enviar)" : ""}.`
+                  : "Todavía no se le avisó al cliente que puede retirar el equipo."}
+              </p>
+              {avisoRetiro && (
+                <p
+                  className={cn(
+                    "rounded-lg border p-3 text-sm",
+                    avisoRetiro === "ENVIADO"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      : "border-estado-autorizar/40 bg-estado-autorizar/10",
+                  )}
+                >
+                  {avisoRetiro === "ENVIADO"
+                    ? `Aviso enviado por email a ${emailCliente}.`
+                    : avisoRetiro === "SIN_EMAIL"
+                      ? "El cliente no tiene email: avisale por WhatsApp."
+                      : "No se pudo enviar el email. Reintentá o avisale por WhatsApp."}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {emailCliente && (
+                  <Button size="sm" variant="outline" onClick={handleAvisoRetiroEmail} disabled={enviandoAviso}>
+                    {enviandoAviso ? "Enviando..." : "Avisar por email"}
+                  </Button>
+                )}
+                {whatsappRetiro && (
+                  <Button
+                    size="sm"
+                    nativeButton={false}
+                    render={
+                      <a
+                        href={whatsappRetiro}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={handleAvisoRetiroWhatsApp}
+                      />
+                    }
+                  >
+                    Avisar por WhatsApp
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border bg-card p-6 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Técnico asignado</h2>
-              {rol === "ADMIN" && detalle.estado !== "ENTREGADO" && !editandoTecnico && (
+              {rol === "ADMIN" && ESTADOS_REASIGNABLES.includes(detalle.estado) && !editandoTecnico && (
                 <button
                   type="button"
                   onClick={() => setEditandoTecnico(true)}
@@ -542,30 +695,45 @@ export default function DetalleClient({
           <div className="rounded-xl border border-border bg-card p-6 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Diagnóstico</h2>
-              {!editandoDiagnostico && (
+              {diagnosticoEditable && !editandoDiagnostico && (
                 <button
                   type="button"
-                  onClick={() => setEditandoDiagnostico(true)}
+                  onClick={abrirEditorDiagnostico}
                   className="text-sm text-primary hover:underline"
                 >
-                  Editar
+                  {detalle.diagnostico ? "Editar" : "Cargar"}
                 </button>
               )}
             </div>
             {!editandoDiagnostico ? (
-              <p className="text-sm whitespace-pre-wrap">
-                {detalle.diagnostico || <span className="text-muted-foreground">Sin diagnóstico cargado.</span>}
-              </p>
+              <>
+                <p className="text-sm whitespace-pre-wrap">
+                  {detalle.diagnostico || <span className="text-muted-foreground">Sin diagnóstico cargado.</span>}
+                </p>
+                {!diagnosticoEditable && detalle.diagnostico && detalle.linkToken && (
+                  <p className="text-xs text-muted-foreground">
+                    No se puede modificar: el presupuesto ya se envió al cliente.
+                  </p>
+                )}
+              </>
             ) : (
               <div className="space-y-3">
                 <textarea
                   value={formDiagnostico}
                   onChange={(e) => setFormDiagnostico(e.target.value)}
-                  rows={3}
+                  rows={6}
                   className={inputClass}
                 />
+                {diagnosticoError && <p className="text-sm text-destructive">{diagnosticoError}</p>}
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleGuardarDiagnostico} disabled={guardandoDiagnostico}>
+                  <Button
+                    size="sm"
+                    onClick={handleGuardarDiagnostico}
+                    disabled={
+                      guardandoDiagnostico ||
+                      (detalle.estado !== "RECIBIDO" && diagnosticoVacio(formDiagnostico))
+                    }
+                  >
                     {guardandoDiagnostico ? "Guardando..." : "Guardar"}
                   </Button>
                   <Button
@@ -575,6 +743,7 @@ export default function DetalleClient({
                     onClick={() => {
                       setEditandoDiagnostico(false);
                       setFormDiagnostico(detalle.diagnostico ?? "");
+                      setDiagnosticoError(null);
                     }}
                   >
                     Cancelar

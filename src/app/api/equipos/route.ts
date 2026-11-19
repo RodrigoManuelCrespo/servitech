@@ -34,12 +34,17 @@ export async function GET(request: Request) {
   return NextResponse.json(cliente.equipos);
 }
 
+// Para comparar números de serie: "5cd 1234" y "5CD1234" son el mismo.
+function normalizarSerie(serie: string) {
+  return serie.replace(/\s+/g, "").toUpperCase();
+}
+
 const crearEquipoSchema = z.object({
   clienteId: z.string().min(1),
   tipo: z.enum(EQUIPO_TIPOS),
   marca: z.string().trim().min(1),
   modelo: z.string().trim().min(1),
-  numeroSerie: z.string().min(1, "El número de serie es obligatorio"),
+  numeroSerie: z.string().trim().min(1, "El número de serie es obligatorio"),
   observaciones: z.string().trim().optional(),
 });
 
@@ -66,13 +71,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
   }
 
+  // El número de serie identifica al equipo físico: no puede haber dos
+  // iguales en el taller. Si vuelve el mismo equipo se reutiliza (y se ve su
+  // historial). Se valida acá y no con un índice porque Equipo no tiene la
+  // empresa (está en el cliente); a esta escala alcanza con buscarlo.
+  const serie = normalizarSerie(parsed.data.numeroSerie);
+  const equiposDelTaller = await prisma.equipo.findMany({
+    where: { cliente: { empresaId: session.user.empresaId }, numeroSerie: { not: null } },
+    select: {
+      id: true,
+      tipo: true,
+      marca: true,
+      modelo: true,
+      numeroSerie: true,
+      cliente: { select: { id: true, nombre: true } },
+    },
+  });
+  const existente = equiposDelTaller.find((e) => normalizarSerie(e.numeroSerie!) === serie);
+  if (existente) {
+    const mismoCliente = existente.cliente.id === cliente.id;
+    const { cliente: duenio, ...equipoExistente } = existente;
+    return NextResponse.json(
+      {
+        error: mismoCliente
+          ? "Este equipo ya está cargado para este cliente."
+          : `Ese número de serie ya está cargado a nombre de ${duenio.nombre}.`,
+        // Solo si es del mismo cliente se ofrece usarlo.
+        existente: mismoCliente ? equipoExistente : undefined,
+      },
+      { status: 409 },
+    );
+  }
+
   const equipo = await prisma.equipo.create({
     data: {
       clienteId: parsed.data.clienteId,
       tipo: parsed.data.tipo,
       marca: parsed.data.marca,
       modelo: parsed.data.modelo,
-      numeroSerie: parsed.data.numeroSerie || null,
+      numeroSerie: parsed.data.numeroSerie,
       observaciones: parsed.data.observaciones || null,
     },
     select: { id: true, tipo: true, marca: true, modelo: true, numeroSerie: true },

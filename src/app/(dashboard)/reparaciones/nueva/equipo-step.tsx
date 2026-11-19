@@ -32,6 +32,8 @@ export function EquipoStep({
   const [numeroSerie, setNumeroSerie] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // El número de serie ya está cargado para este cliente: se ofrece usarlo.
+  const [existente, setExistente] = useState<EquipoResumen | null>(null);
 
   useEffect(() => {
     if (selected) return;
@@ -44,6 +46,7 @@ export function EquipoStep({
 
   async function handleCrear() {
     setError(null);
+    setExistente(null);
 
     // Validamos que todos los campos requeridos estén completos
     if (!tipo || !marca.trim() || !modelo.trim() || !numeroSerie.trim()) {
@@ -65,7 +68,9 @@ export function EquipoStep({
     });
 
     if (!res.ok) {
-      setError("No se pudo agregar el equipo.");
+      const data: { error?: string; existente?: EquipoResumen } = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo agregar el equipo.");
+      setExistente(data.existente ?? null);
       return;
     }
     onSelect(await res.json());
@@ -164,7 +169,16 @@ export function EquipoStep({
             className={inputClass}
           />
         </div>
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        {error && (
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-destructive">{error}</p>
+            {existente && (
+              <Button type="button" size="sm" variant="outline" onClick={() => onSelect(existente)}>
+                Usar ese equipo
+              </Button>
+            )}
+          </div>
+        )}
         <Button type="button" onClick={handleCrear} className="mt-3">
           Agregar equipo
         </Button>

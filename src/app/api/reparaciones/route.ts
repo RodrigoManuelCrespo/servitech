@@ -119,7 +119,7 @@ export async function POST(request: Request) {
 
   if (tecnicoAsignadoId) {
     const tecnico = await prisma.usuario.findFirst({
-      where: { id: tecnicoAsignadoId, empresaId, rol: "TECNICO" },
+      where: { id: tecnicoAsignadoId, empresaId, rol: "TECNICO", activo: true },
       select: { id: true },
     });
     if (!tecnico) {

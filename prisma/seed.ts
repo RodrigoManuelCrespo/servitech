@@ -65,6 +65,8 @@ type Demo = {
   diagnostico?: string;
   monto?: number;
   mensaje?: string;
+  // Hace cuántos días se le mandó el aviso de retiro por email.
+  avisoRetiroDias?: number;
   // El primer paso es el alta (RECIBIDO); el último define el estado actual.
   pasos: Paso[];
 };
@@ -205,6 +207,7 @@ async function main() {
       tecnico: true,
       fallaReportada: "Se mojó y no enciende.",
       checklist: checklist("NNNNNA"),
+      avisoRetiroDias: 5,
       pasos: [
         { estado: "RECIBIDO", dias: 7, por: "admin" },
         {
@@ -221,7 +224,13 @@ async function main() {
       tecnico: true,
       fallaReportada: "Está muy lenta y tarda varios minutos en arrancar.",
       checklist: checklist("SSNSSN"),
-      diagnostico: "Disco rígido con sectores dañados. Se recomienda pasar a SSD de 480 GB y reinstalar el sistema.",
+      diagnostico: [
+        "Problema encontrado: disco rígido con sectores dañados (SMART en estado crítico).",
+        "Solución propuesta: reemplazo por SSD de 480 GB y reinstalación del sistema.",
+        "Repuestos necesarios: SSD 480 GB SATA.",
+        "Costo estimado de repuestos y mano de obra: $45.000 SSD + 3 h de trabajo.",
+        "Tiempo estimado de reparación: 3 días hábiles.",
+      ].join("\n"),
       monto: 95000,
       mensaje: [
         "Trabajo a realizar: cambio de disco por SSD 480 GB, reinstalación de Windows y copia de los archivos del sistema de la farmacia.",
@@ -241,7 +250,13 @@ async function main() {
       tecnico: true,
       fallaReportada: "Se calienta mucho y se apaga sola después de un rato.",
       checklist: checklist("SSNSSN"),
-      diagnostico: "Ventilador obstruido con polvo y pasta térmica seca. Limpieza interna y cambio de pasta térmica.",
+      diagnostico: [
+        "Problema encontrado: ventilador obstruido con polvo y pasta térmica seca; el procesador llega a 98 °C.",
+        "Solución propuesta: limpieza interna completa y cambio de pasta térmica.",
+        "Repuestos necesarios: pasta térmica.",
+        "Costo estimado de repuestos y mano de obra: $5.000 pasta + 1,5 h de trabajo.",
+        "Tiempo estimado de reparación: 1 día.",
+      ].join("\n"),
       pasos: [
         { estado: "RECIBIDO", dias: 3, por: "admin" },
         { estado: "DIAGNOSTICADO", dias: 2, por: "tecnico" },
@@ -318,6 +333,9 @@ async function main() {
     if (envio !== -1) {
       const canalEnvio = conEmail.has(equipo.clienteId) ? ("EMAIL" as const) : ("WHATSAPP_MOCK" as const);
       documentos.push({ tipoDocumento: "PRESUPUESTO", canalEnvio, estadoEnvio: "ENVIADO" as const, fechaEnvio: fechas[envio] });
+    }
+    if (r.avisoRetiroDias !== undefined && conEmail.has(equipo.clienteId)) {
+      documentos.push({ tipoDocumento: "AVISO_RETIRO", canalEnvio: "EMAIL" as const, estadoEnvio: "ENVIADO" as const, fechaEnvio: hace(r.avisoRetiroDias, 11) });
     }
     if (documentos.length) {
       await prisma.documentoGenerado.createMany({ data: documentos.map((d) => ({ ...d, reparacionId: r.id })) });

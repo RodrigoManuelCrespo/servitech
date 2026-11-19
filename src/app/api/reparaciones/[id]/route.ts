@@ -3,7 +3,13 @@ import { z } from "zod";
 import { EstadoReparacion, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiAdmin, requireApiSession } from "@/lib/session";
-import { presupuestoEditable, transicionesPara } from "@/lib/estado";
+import {
+  ESTADOS_REASIGNABLES,
+  diagnosticoEditable,
+  presupuestoEditable,
+  transicionesPara,
+} from "@/lib/estado";
+import { diagnosticoVacio } from "@/lib/diagnostico";
 import { CANALES_RESPUESTA, CANALES_RESPUESTA_VALORES } from "@/lib/presupuesto";
 import { enviarPresupuestoPorEmail } from "@/lib/presupuesto-email";
 
@@ -202,11 +208,25 @@ export async function PATCH(
     if (respuestaDelCliente && !canalRespuesta) {
       return NextResponse.json({ error: "Indicá cómo respondió el cliente." }, { status: 400 });
     }
-    if (nuevoEstado === "DIAGNOSTICADO" && !(diagnostico ?? actual.diagnostico)?.trim()) {
+    if (nuevoEstado === "DIAGNOSTICADO" && diagnosticoVacio(diagnostico ?? actual.diagnostico)) {
       return NextResponse.json(
-        { error: "Cargá el diagnóstico antes de marcarla como diagnosticada." },
+        { error: "Completá el diagnóstico antes de marcarla como diagnosticada." },
         { status: 400 },
       );
+    }
+  }
+
+  if (diagnostico !== undefined) {
+    if (!diagnosticoEditable(actual.estado, session.user.rol, !!actual.linkToken)) {
+      return NextResponse.json(
+        { error: "El diagnóstico ya no se puede modificar: el presupuesto ya se envió al cliente." },
+        { status: 400 },
+      );
+    }
+    // Una vez diagnosticada no puede quedar sin diagnóstico.
+    const estadoFinal = cambiaEstado ? nuevoEstado : actual.estado;
+    if (estadoFinal !== "RECIBIDO" && diagnosticoVacio(diagnostico)) {
+      return NextResponse.json({ error: "Completá el diagnóstico." }, { status: 400 });
     }
   }
 
@@ -218,21 +238,32 @@ export async function PATCH(
     );
   }
 
+  const reasigna = tecnicoAsignadoId !== undefined && tecnicoAsignadoId !== actual.tecnicoAsignadoId;
+  if (reasigna && !ESTADOS_REASIGNABLES.includes(actual.estado)) {
+    return NextResponse.json(
+      { error: "Ya no se puede reasignar: el trabajo de esta reparación está terminado." },
+      { status: 400 },
+    );
+  }
+
   if (tecnicoAsignadoId) {
     const tecnico = await prisma.usuario.findFirst({
-      where: { id: tecnicoAsignadoId, empresaId: session.user.empresaId, rol: "TECNICO" },
+      where: { id: tecnicoAsignadoId, empresaId: session.user.empresaId, rol: "TECNICO", activo: true },
       select: { id: true },
     });
     if (!tecnico) {
-      return NextResponse.json({ error: "El técnico elegido no es válido." }, { status: 400 });
+      return NextResponse.json(
+        { error: "El técnico elegido no es válido o está inactivo." },
+        { status: 400 },
+      );
     }
   }
 
   const data: Prisma.ReparacionUpdateInput = {};
-  if (diagnostico !== undefined) data.diagnostico = diagnostico || null;
+  if (diagnostico !== undefined) data.diagnostico = diagnosticoVacio(diagnostico) ? null : diagnostico;
   if (montoPresupuesto !== undefined) data.montoPresupuesto = montoPresupuesto;
   if (mensajePresupuesto !== undefined) data.mensajePresupuesto = mensajePresupuesto || null;
-  if (tecnicoAsignadoId !== undefined) {
+  if (reasigna) {
     data.tecnicoAsignado = tecnicoAsignadoId
       ? { connect: { id: tecnicoAsignadoId } }
       : { disconnect: true };
